@@ -1,34 +1,54 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as A from './lib/astro.js';
 import {BODY, PLANETS} from './lib/bodies.js';
-import {FactDeck, eventCard, missionStatus} from './lib/facts.js';
+import {FactDeck, bodyDetails, eventCard, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
 import {MISSIONS, buildTrajectories} from './lib/missions.js';
+import {PowerMonitor} from './lib/power.js';
 import * as R from './lib/render.js';
+import {Card, Timeline, label} from './lib/ui.js';
 
 const RELAYOUT_KEYS = ['distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
-    'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts'];
+    'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts',
+    'interactive', 'timeline'];
+const SCHEDULE_KEYS = ['fps', 'pause-when-covered', 'pause-coverage', 'battery-saver', 'battery-fps',
+    'idle-dim-minutes', 'adaptive-fps'];
 const HOLD_SECONDS = 20;          // pause on "today" before the replay starts over
 const EVENT_CARD_SECONDS = 8;
 const TRAIL_HZ = 4;
 const HUD_HZ = 2;
+const CONTROLS_SECONDS = 4;       // the timeline fades this long after the pointer stops
+const BROWSE_SECONDS = 120;       // live mode returns to today after this long untouched
+const FUTURE_DAYS = 2 * 365.25;   // how far past today the timeline reaches
+const SPEEDS = [0.5, 1, 2, 4, 8, 12, 20, 30, 60, 120, 240, 400];
+const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
+const IDLE_FPS = 10;
+const STILL_FPS = 5;
 
 const smooth = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
 
-// St.Label that never ellipsizes (labels here are short and sized to fit).
-function label(styleClass, text = '') {
-    const l = new St.Label({style_class: styleClass, text});
-    l.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-    return l;
+// Distance from (x, y) to a polyline of [x, y, ...] points.
+function polylineDistance(pts, x, y) {
+    let best = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const dx = x1 - x0, dy = y1 - y0;
+        const len2 = dx * dx + dy * dy;
+        const k = len2 ? Math.max(0, Math.min(1, ((x - x0) * dx + (y - y0) * dy) / len2)) : 0;
+        best = Math.min(best, Math.hypot(x - x0 - k * dx, y - y0 - k * dy));
+    }
+    return best;
 }
+
+const sameSubject = (a, b) => !!a && !!b && (a.tr ? a.tr === b.tr : a.id === b.id);
 
 // A small St.DrawingArea centered on a point.
 class Sprite {
@@ -60,7 +80,9 @@ class Sprite {
 // A DrawingArea that sizes itself to the bounding box of what it draws.
 class BoxCanvas {
     constructor(parent) {
-        this.area = new St.DrawingArea();
+        // Hidden until it has something to draw: a visible 0x0 area upsets
+        // the stage's picking.
+        this.area = new St.DrawingArea({visible: false});
         this._paths = [];
         this._origin = [0, 0];
         this.area.connect('repaint', area => {
@@ -102,77 +124,6 @@ class BoxCanvas {
     }
 }
 
-// A card: title, subtitle and wrapped lines, plus a leader line to its subject.
-class Card {
-    constructor(parent, {title, subtitle, lines}, color, width) {
-        this.box = new St.BoxLayout({style_class: 'orrery-card', vertical: true, opacity: 0, width});
-        const titleLabel = new St.Label({style_class: 'orrery-card-title', text: title});
-        titleLabel.set_style(`color: ${color};`);
-        this.box.add_child(titleLabel);
-        if (subtitle)
-            this.box.add_child(new St.Label({style_class: 'orrery-card-subtitle', text: subtitle}));
-        for (const line of lines.filter(Boolean)) {
-            const text = new St.Label({style_class: 'orrery-card-line', text: line});
-            text.clutter_text.set_line_wrap(true);
-            text.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);
-            text.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-            this.box.add_child(text);
-        }
-        // A 1x1 line stretched with scale_x inside a rotated holder, so moving
-        // it never triggers a relayout.
-        this._line = new St.Widget({style_class: 'orrery-leader', width: 1, height: 1, translation_y: -0.5});
-        this.leader = new Clutter.Actor({opacity: 0});
-        this.leader.add_child(this._line);
-        this.ring = new St.Widget({style_class: 'orrery-ring', opacity: 0});
-        parent.add_child(this.leader);
-        parent.add_child(this.ring);
-        parent.add_child(this.box);
-        this.width = width;
-        this.height = this.box.get_preferred_height(width)[1];
-        for (const a of [this.box, this.leader, this.ring])
-            a.ease({opacity: 255, duration: 450, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-    }
-
-    place(x, y) {
-        this.x = x;
-        this.y = y;
-        this.box.set_position(Math.round(x), Math.round(y));
-    }
-
-    // Point the leader at (tx, ty), stopping `gap` px short of it.
-    aim(tx, ty, gap) {
-        const {x, y, width: w, height: h} = this;
-        const sx = tx < x ? x : tx > x + w ? x + w : x + w / 2;
-        const sy = tx >= x && tx <= x + w ? (ty < y ? y : y + h) : Math.max(y + 14, Math.min(y + h - 14, ty));
-        const dx = tx - sx, dy = ty - sy;
-        const len = Math.hypot(dx, dy) - gap;
-        this.leader.visible = len > 4;
-        if (len > 4) {
-            this.leader.set_translation(sx, sy, 0);
-            this.leader.rotation_angle_z = Math.atan2(dy, dx) * 180 / Math.PI;
-            this._line.scale_x = len;
-        }
-        const r = Math.round(gap);
-        if (this._ringSize !== 2 * r) {
-            this._ringSize = 2 * r;
-            this.ring.set_size(2 * r, 2 * r);
-        }
-        this.ring.set_translation(tx - r, ty - r, 0);
-    }
-
-    dismiss() {
-        for (const a of [this.box, this.leader, this.ring]) {
-            a.remove_all_transitions();
-            a.ease({opacity: 0, duration: 450, mode: Clutter.AnimationMode.EASE_IN_QUAD, onComplete: () => a.destroy()});
-        }
-    }
-
-    destroy() {
-        for (const a of [this.box, this.leader, this.ring])
-            a.destroy();
-    }
-}
-
 class OrreryScene {
     constructor(settings) {
         this._settings = settings;
@@ -185,6 +136,16 @@ class OrreryScene {
         this._factCard = null;
         this._eventCards = [];
         this._factCount = 0;
+        this._playing = true;
+        this._browsing = false;       // live mode, looking at another date
+        this._browseClock = 0;
+        this._lastActivity = -Infinity;
+        this._selected = null;        // {id} or {tr}, chosen by a click
+        this._hover = null;
+        this._pin = null;             // the card for the selection
+        this._dim = 1;
+        this.powerSaving = false;
+        this.onActivity = null;
 
         this.actor = new St.Widget({style_class: 'orrery', reactive: false, clip_to_allocation: true});
         this._content = new Clutter.Actor();
@@ -192,6 +153,9 @@ class OrreryScene {
         this._backdrop = new St.DrawingArea();
         this._backdrop.connect('repaint', area => this._paintBackdrop(area));
         this._content.add_child(this._backdrop);
+        this._sunLayer = new Clutter.Actor();
+        this._content.add_child(this._sunLayer);
+        this._hoverPath = new BoxCanvas(this._content);
         this._highlight = new BoxCanvas(this._content);
         this._trails = new BoxCanvas(this._content);
         this._world = new Clutter.Actor();
@@ -204,12 +168,15 @@ class OrreryScene {
         this._buildHud();
         this._buildTrajectories();
         this._resetTime();
+        this._connectInput();
     }
 
     destroy() {
         this._factCard?.destroy();
+        this._pin?.destroy();
         for (const c of this._eventCards)
             c.card.destroy();
+        this._timeline.destroy();
         this.actor.destroy();
     }
 
@@ -219,53 +186,172 @@ class OrreryScene {
 
     // ---- Time ----
 
+    _live() {
+        return this._settings.get_string('mode') === 'live';
+    }
+
     _startJd() {
         return A.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
     }
 
+    _endJd() {
+        return A.jdNow() + FUTURE_DAYS;
+    }
+
     _resetTime() {
         const s = this._settings;
-        if (s.get_string('mode') === 'live') {
+        if (this._live()) {
             this._jd = A.jdNow();
         } else {
             const saved = s.get_double('replay-jd');
             this._jd = saved > this._startJd() && saved < A.jdNow() ? saved : this._startJd();
         }
+        this._browsing = false;
         this._hold = 0;
         this._seekEvents();
     }
 
     _advance(dt) {
         const s = this._settings;
-        if (s.get_string('mode') === 'live') {
-            this._jd = A.jdNow();
+        const now = A.jdNow();
+        if (this._live() && !this._browsing) {
+            this._jd = now;
             return;
         }
-        const now = A.jdNow();
-        if (this._jd < now) {
-            this._jd = Math.min(now, this._jd + dt * s.get_double('days-per-second'));
+        if (this._live() && (this._browseClock += dt) > BROWSE_SECONDS) {
+            this._goNow();
+            return;
+        }
+        if (!this._playing || this._timeline.dragging)
+            return;
+        // Play up to today, or to the end of the timeline if someone moved
+        // past today on purpose.
+        const end = this._jd > now + 1 ? this._endJd() : now;
+        if (this._jd < end) {
+            this._jd = Math.min(end, this._jd + dt * s.get_double('days-per-second'));
+            if (this._live() && this._jd >= now)
+                this._browsing = false;
+            return;
+        }
+        if (this._live()) {
+            this._browsing = false;
             return;
         }
         // Hold on today for a moment, then fade out and start over.
         this._hold += dt;
-        if (this._hold > HOLD_SECONDS && !this._restarting) {
-            this._restarting = true;
-            this._content.ease({
-                opacity: 0, duration: 1200, mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                onComplete: () => {
-                    this._restarting = false;
-                    this._jd = this._startJd();
-                    this._hold = 0;
-                    this._seekEvents();
-                    this._updateAll(0);
-                    this._content.ease({opacity: this._opacity(), duration: 1500, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-                },
-            });
+        if (this._hold > HOLD_SECONDS && !this._restarting)
+            this._restart();
+    }
+
+    _restart() {
+        this._restarting = true;
+        this._content.ease({
+            opacity: 0, duration: 1200, mode: Clutter.AnimationMode.EASE_IN_QUAD,
+            onComplete: () => {
+                this._restarting = false;
+                this._jd = this._startJd();
+                this._hold = 0;
+                this._seekEvents();
+                this._updateAll(0);
+                this._content.ease({opacity: this._opacity(), duration: 1500, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            },
+        });
+    }
+
+    // Is the date on screen moving fast enough to see?
+    _timeRuns() {
+        if (this._live() && !this._browsing)
+            return false;
+        return this._playing && !this._timeline.dragging && this._jd < (this._jd > A.jdNow() + 1 ? this._endJd() : A.jdNow());
+    }
+
+    _spinning() {
+        return this._settings.get_boolean('spin-planets') && !this.powerSaving;
+    }
+
+    // Nothing moves: the extension can drop to a few frames per second.
+    get still() {
+        return !this._timeRuns() && !this._spinning() && !this._restarting &&
+            this._realTime - this._lastActivity > 3 && !this._eventCards.length;
+    }
+
+    get interacting() {
+        return this._realTime - this._lastActivity < CONTROLS_SECONDS || this._timeline.dragging;
+    }
+
+    // Jump the clock; `done` is false while the playhead is being dragged.
+    _seek(t, done = true, ev = null) {
+        const lead = Math.min(60, 3 * this._settings.get_double('days-per-second'));
+        if (ev) {
+            // Land a little before the event so it plays out, and follow
+            // the mission it belongs to.
+            t = ev.t - lead;
+            const tr = this._trajectories.find(x => x.mission === ev.mission);
+            if (tr)
+                this._select({tr}, {expand: this._pin?.expanded});
+            this._playing = true;
         }
+        t = Math.max(this._startJd(), Math.min(this._endJd(), t));
+        if (this._live())
+            this._browsing = Math.abs(t - A.jdNow()) > 0.5;
+        this._browseClock = 0;
+        this._jd = t;
+        this._hold = 0;
+        this._seekEvents();
+        if (done) {
+            for (const c of this._eventCards)
+                c.card.dismiss();
+            this._eventCards = [];
+        }
+        this._updateAll(0);
+    }
+
+    _goNow() {
+        this._browsing = false;
+        this._browseClock = 0;
+        this._playing = true;
+        this._seek(A.jdNow());
+    }
+
+    _togglePlay() {
+        if (this._live() && !this._browsing) {
+            // Pausing live time means looking at this moment for a while.
+            this._browsing = true;
+            this._playing = false;
+        } else {
+            this._playing = !this._playing;
+            if (this._playing && !this._live() && this._jd >= A.jdNow() - 0.5 && this._jd <= A.jdNow() + 1)
+                this._seek(this._startJd());
+        }
+        this._browseClock = 0;
+        this._syncTimelineState();
+        this._updateHud();
+    }
+
+    _changeSpeed(dir) {
+        const dps = this._settings.get_double('days-per-second');
+        let i = SPEEDS.findIndex(v => v >= dps - 1e-6);
+        if (i < 0)
+            i = SPEEDS.length - 1;
+        else if (dir < 0 && SPEEDS[i] > dps + 1e-6)
+            i--;
+        const next = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, i + dir))];
+        this._settings.set_double('days-per-second', next);
     }
 
     _opacity() {
-        return Math.round(255 * this._settings.get_double('brightness') / 100);
+        return Math.round(255 * this._settings.get_double('brightness') / 100 * this._dim);
+    }
+
+    // Dim the whole scene (idle) or bring it back (dim = 1).
+    setDim(dim) {
+        if (dim === this._dim)
+            return;
+        this._dim = dim;
+        if (this._restarting)
+            return;
+        this._content.remove_transition('opacity');
+        this._content.ease({opacity: this._opacity(), duration: dim < 1 ? 3000 : 400, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
 
     // ---- Spacecraft ----
@@ -299,6 +385,7 @@ class OrreryScene {
         this._H = H;
         this.actor.set_position(monitor.x, monitor.y);
         this.actor.set_size(W, H);
+        this.actor.reactive = s.get_boolean('interactive');
         this._backdrop.set_size(W, H);
         this._content.opacity = this._opacity();
 
@@ -314,14 +401,25 @@ class OrreryScene {
             mode: s.get_string('distance-scale'), tilt, azimuth: s.get_double('azimuth'),
         });
         this._unit = W / 220 * s.get_double('planet-scale') / 100;
+        this._orbitCache = new Map();
 
         this._buildBodies();
         this._buildCraft();
         this._layoutHud();
+        this._layoutSunlight();
         this._backdrop.queue_repaint();
+        this._setHover(null);
+
+        // Cards are sized to the screen: rebuild the pinned one, move the rest.
+        const selected = this._selected, expanded = this._pin?.expanded;
+        this._pin?.destroy();
+        this._pin = this._selected = null;
+        if (selected && (!selected.tr || this._trajectories.includes(selected.tr)))
+            this._select(selected, {expand: expanded});
+        this._factCard?.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
+        this._stackEventCards();
         this._updateAll(0);
-        if (this._factCard && this._factSubject)
-            this._showHighlight(this._factSubject, this._factColor);
+        this._showHighlight();
     }
 
     _bodyRadius(id) {
@@ -425,37 +523,151 @@ class OrreryScene {
     // ---- HUD ----
 
     _buildHud() {
-        this._dateBox = new St.BoxLayout({style_class: 'orrery-datebox', vertical: true});
+        this._dateBox = new St.BoxLayout({style_class: 'orrery-datebox', orientation: Clutter.Orientation.VERTICAL});
         this._dateLabel = label('orrery-date');
         this._caption = label('orrery-caption');
         this._dateBox.add_child(this._dateLabel);
         this._dateBox.add_child(this._caption);
-        this._missionBox = new St.BoxLayout({style_class: 'orrery-missions', vertical: true});
+        this._missionBox = new St.BoxLayout({style_class: 'orrery-missions', orientation: Clutter.Orientation.VERTICAL});
         this._hud.add_child(this._dateBox);
         this._hud.add_child(this._missionBox);
         this._missionRows = new Map();
+
+        // Sunlight legend, under the date.
+        this._legend = new St.BoxLayout({style_class: 'orrery-legend', orientation: Clutter.Orientation.VERTICAL, visible: false});
+        this._legend.add_child(label('orrery-legend-title', 'Sunlight, W/m²'));
+        const marks = [1, 10, 100, 1000, 10000];
+        this._legendBar = new St.DrawingArea({width: 200, height: 9});
+        this._legendBar.connect('repaint', area => {
+            const cr = area.get_context();
+            R.drawSunlightLegend(cr, ...area.get_surface_size(), marks);
+            cr.$dispose();
+        });
+        this._legend.add_child(this._legendBar);
+        const ticks = new Clutter.Actor({height: 12, width: 200});
+        for (const [i, text] of ['1', '10', '100', '1k', '10k'].entries()) {
+            const l = label('orrery-legend-tick', text);
+            l.set_position(Math.round(200 * Math.log10(marks[i]) / Math.log10(30000)) - (i ? 6 : 0), 0);
+            ticks.add_child(l);
+        }
+        this._legend.add_child(ticks);
+        this._hud.add_child(this._legend);
+
+        this._timeline = new Timeline(this._hud, {
+            seek: (t, done, ev) => this._seek(t, done, ev),
+            toggle: () => this._togglePlay(),
+            restart: () => {
+                this._playing = true;
+                this._seek(this._startJd());
+                this._syncTimelineState();
+            },
+            speed: dir => this._changeSpeed(dir),
+            now: () => this._goNow(),
+            sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
+            hover: h => this._timelineHover(h),
+            activity: () => this._activity(),
+        });
+
+        this._timeline.actor.connect('enter-event', () => {
+            this._setHover(null);
+            return Clutter.EVENT_PROPAGATE;
+        });
+
+        // One tooltip, shared by the scene and the timeline.
+        this._tooltip = label('orrery-tooltip');
+        this._tooltip.opacity = 0;
+        this._tooltip.hide();
+        this._hud.add_child(this._tooltip);
     }
 
     _layoutHud() {
-        const show = this._settings.get_boolean('show-hud');
+        const s = this._settings;
+        const show = s.get_boolean('show-hud');
         this._dateBox.visible = show;
-        const {left, top} = this._area;
+        const {left, right, top, bottom} = this._area;
         const m = Math.round(this._W * 0.018);
         this._margin = m;
         this._dateBox.set_position(left + m, top + Math.round(m * 0.6));
         this._cardWidth = Math.round(Math.min(380, Math.max(260, this._W * 0.19)));
-        this._missionBox.visible = show && this._settings.get_boolean('show-missions');
+        this._missionBox.visible = show && s.get_boolean('show-missions');
+
+        // Timeline: between the mission list and the event cards.
+        const mode = s.get_boolean('interactive') ? s.get_string('timeline') : 'never';
+        this._timelineMode = mode;
+        const tw = Math.round(Math.max(Math.min(1100, right - left - 2 * (this._cardWidth + 2 * m)), Math.min(560, right - left - 2 * m)));
+        const th = 46;
+        this._timeline.actor.set_size(tw, th);
+        this._timeline.actor.set_position(Math.round((left + right - tw) / 2), bottom - m - th);
+        this._timelineRange();
+        if (mode === 'always')
+            this._timeline.show();
+        else if (mode === 'never' || !this.interacting)
+            this._timeline.hide();
+        this._syncTimelineState();
         this._updateHud();
+    }
+
+    _timelineRange() {
+        const t0 = this._startJd(), now = A.jdNow(), t1 = this._endJd();
+        const y0 = A.yearOfJd(t0), y1 = A.yearOfJd(t1);
+        const step = y1 - y0 > 40 ? 10 : 5;
+        const years = [], labels = [];
+        for (let y = y0; y <= y1; y++) {
+            const t = A.jd(`${y}-01-01`);
+            if (t < t0 || t > t1)
+                continue;
+            years.push([t, y % step === 0]);
+            if (y % step === 0)
+                labels.push([t, `${y}`]);
+        }
+        const events = this._events.filter(ev => ev.kind !== 'note' || ev.title)
+            .map(ev => ({t: ev.t, kind: ev.kind, ev, rgb: R.hexToRgb(ev.mission.color)}));
+        this._timeline.setRange({t0, t1, now, years, labels, events});
+    }
+
+    _syncTimelineState() {
+        const dps = this._settings.get_double('days-per-second');
+        this._timeline.setState({
+            playing: this._live() && !this._browsing ? true : this._playing,
+            speed: dps >= 1 ? `${+dps.toFixed(1)} d/s` : `${dps} d/s`,
+            sunlight: this._settings.get_boolean('sunlight-view'),
+            live: this._live() && !this._browsing,
+        });
     }
 
     _updateHud() {
         const s = this._settings;
-        const live = s.get_string('mode') === 'live';
+        const live = this._live();
         this._dateLabel.text = A.formatDate(this._jd);
-        const today = this._jd >= A.jdNow() - 0.5;
-        this._caption.text = live ? 'Live · the solar system right now'
-            : today ? 'Today · the replay starts over shortly'
-                : `Replaying the space age · ${+s.get_double('days-per-second').toFixed(1)} days per second`;
+        const now = A.jdNow();
+        const today = Math.abs(this._jd - now) < 0.5;
+        const dps = +s.get_double('days-per-second').toFixed(1);
+        let caption;
+        if (live && !this._browsing)
+            caption = 'Live · the solar system right now';
+        else if (live)
+            caption = `Exploring${this._playing ? ` · ${dps} days per second` : ' · paused'} · back to live soon`;
+        else if (!this._playing)
+            caption = 'Paused · press play on the timeline to go on';
+        else if (this._jd > now + 0.5)
+            caption = `Ahead of today · ${dps} days per second`;
+        else if (today)
+            caption = 'Today · the replay starts over shortly';
+        else
+            caption = `Replaying the space age · ${dps} days per second`;
+        if (s.get_boolean('sunlight-view'))
+            caption += ' · sunlight';
+        this._caption.text = caption;
+        this._timeline.setTime(this._jd);
+        this._syncTimelineState();
+
+        this._updateLabels();
+        this._refreshPin();
+
+        if (this._legend.visible) {
+            const h = this._dateBox.visible ? this._dateBox.get_preferred_height(-1)[1] : 0;
+            this._legend.set_position(this._dateBox.x, this._dateBox.y + h + 12);
+        }
 
         if (!this._missionBox.visible)
             return;
@@ -472,27 +684,94 @@ class OrreryScene {
                 this._missionRows.delete(id);
             }
         }
+        const interactive = s.get_boolean('interactive');
         for (const [tr, status] of active) {
             let row = this._missionRows.get(tr.mission.id);
             if (!row) {
-                row = {box: new St.BoxLayout({style_class: 'orrery-mission-row'})};
+                const inner = new St.BoxLayout({style_class: 'orrery-mission-row'});
                 const dot = new St.Widget({style_class: 'orrery-mission-dot', y_align: Clutter.ActorAlign.CENTER});
                 dot.set_style(`background-color: ${tr.mission.color};`);
                 const name = label('orrery-mission-name', tr.mission.short ?? tr.mission.name);
                 name.y_align = Clutter.ActorAlign.CENTER;
                 name.set_style(`color: ${tr.mission.color};`);
-                row.status = label('orrery-mission-status');
+                row = {status: label('orrery-mission-status')};
                 row.status.y_align = Clutter.ActorAlign.CENTER;
-                row.box.add_child(dot);
-                row.box.add_child(name);
-                row.box.add_child(row.status);
+                inner.add_child(dot);
+                inner.add_child(name);
+                inner.add_child(row.status);
+                // Each row is a button that picks its mission.
+                row.box = new St.Button({style_class: 'orrery-mission-button', child: inner, can_focus: false,
+                    reactive: interactive, x_align: Clutter.ActorAlign.START});
+                row.box.connect('clicked', () => this._select({tr}, {toggle: true}));
+                row.box.connect('notify::hover', () => this._setHover(row.box.hover ? {tr} : null, {fromList: true}));
                 this._missionBox.add_child(row.box);
                 this._missionRows.set(tr.mission.id, row);
             }
             row.status.text = status;
+            row.box[sameSubject(this._selected, {tr}) ? 'add_style_class_name' : 'remove_style_class_name']('orrery-mission-selected');
         }
+        // Rows are padded buttons; shift left so the names line up with the date.
         const h = this._missionBox.get_preferred_height(-1)[1];
-        this._missionBox.set_position(this._area.left + this._margin, this._area.bottom - this._margin - h);
+        this._missionBox.set_position(this._area.left + this._margin - 6, this._area.bottom - this._margin - h);
+    }
+
+    // Planet and craft names; in the sunlight view they also say how much
+    // sunlight falls there.
+    _updateLabels() {
+        const sunlight = this._settings.get_boolean('sunlight-view');
+        for (const b of this._bodies) {
+            if (!b.label || !b.pos)
+                continue;
+            const name = BODY[b.id].name.toUpperCase();
+            const text = sunlight ? `${name}  ${A.formatIrradiance(A.irradiance(A.norm(b.pos)))}` : name;
+            if (b.label.text !== text)
+                b.label.text = text;
+        }
+    }
+
+    // ---- Sunlight view ----
+
+    _layoutSunlight() {
+        this._sunLayer.destroy_all_children();
+        const on = this._settings.get_boolean('sunlight-view');
+        this._legend.visible = on;
+        if (!on)
+            return;
+        const {cx, cy, squash} = this._proj;
+        const {left, right, top, bottom} = this._area;
+        const ang = -52 * Math.PI / 180;
+        let lastY = -Infinity;
+        // Contour labels along a ray to the upper right, outermost (highest
+        // on screen) first, so the inner ones give way when crowded.
+        for (const e of [...SUN_LEVELS].reverse()) {
+            const rho = this._proj.radiusPx(A.irradianceRadius(e));
+            const x = cx + rho * Math.cos(ang) + 4, y = cy + rho * squash * Math.sin(ang) - 14;
+            if (rho < this._sun.R * 2.2 || x < left || y < top + 40 || y - lastY < 15)
+                continue;
+            const text = e === A.SOLAR_CONSTANT ? `${A.formatIrradiance(e)} · Earth` : A.formatIrradiance(e);
+            const l = label('orrery-sun-contour', text);
+            // The contour's color, lifted toward white so the dim outer ones read.
+            const [r, g, b] = R.sunlightColor(e).map(c => Math.round(255 * (0.65 * c + 0.35)));
+            l.set_style(`color: rgba(${r}, ${g}, ${b}, 0.75);`);
+            this._sunLayer.add_child(l);
+            if (x + l.get_preferred_width(-1)[1] > right) {
+                l.destroy();
+                continue;
+            }
+            l.set_position(Math.round(x), Math.round(y));
+            lastY = y;
+        }
+        // The habitable zone, named below the Sun.
+        const [zIn, zOut] = A.HABITABLE_ZONE.map(r => this._proj.radiusPx(r));
+        const zone = label('orrery-sun-zone', 'Habitable zone');
+        this._sunLayer.add_child(zone);
+        const zw = zone.get_preferred_width(-1)[1];
+        const zy = cy + (zIn + zOut) / 2 * squash - 6;
+        if (zy < bottom && zOut - zIn > 6) {
+            zone.set_position(Math.round(cx - zw / 2), Math.round(zy));
+        } else {
+            zone.destroy();
+        }
     }
 
     // ---- Backdrop ----
@@ -500,8 +779,15 @@ class OrreryScene {
     _paintBackdrop(area) {
         const cr = area.get_context();
         const s = this._settings;
-        if (s.get_boolean('show-stars'))
+        const sunlight = s.get_boolean('sunlight-view');
+        if (s.get_boolean('show-stars') && !sunlight)
             R.drawStars(cr, this._W, this._H);
+        if (sunlight) {
+            R.drawSunlightField(cr, {
+                cx: this._proj.cx, cy: this._proj.cy, squash: this._proj.squash,
+                radiusPx: r => this._proj.radiusPx(r), levels: SUN_LEVELS, zone: A.HABITABLE_ZONE,
+            });
+        }
         if (s.get_boolean('show-belts')) {
             const rnd = R.seeded(4);
             const belt = (n, a0, a1, alpha) => {
@@ -512,8 +798,8 @@ class OrreryScene {
                 }
                 R.drawDots(cr, pts, alpha, 0.5);
             };
-            belt(1600, 2.15, 3.3, 0.32);
-            belt(900, 30, 48, 0.16);
+            belt(1600, 2.15, 3.3, sunlight ? 0.2 : 0.32);
+            belt(900, 30, 48, sunlight ? 0.1 : 0.16);
         }
         if (s.get_boolean('show-orbits')) {
             for (const b of this._bodies.slice(1)) {
@@ -525,7 +811,11 @@ class OrreryScene {
         cr.$dispose();
     }
 
+    // Projected orbit; orbits drift so slowly that a decade-old one is fine.
     _orbitPath(id) {
+        const hit = this._orbitCache.get(id);
+        if (hit && Math.abs(hit.jd - this._jd) < 3650)
+            return hit.pts;
         const o = A.planetOrbit(id, this._jd);
         const pts = [];
         for (let i = 0; i <= 240; i++) {
@@ -533,6 +823,7 @@ class OrreryScene {
             const x = o.a * (Math.cos(E) - o.e), y = o.a * Math.sqrt(1 - o.e * o.e) * Math.sin(E);
             pts.push(this._proj.project(A.add(A.scale(o.p, x), A.scale(o.q, y))));
         }
+        this._orbitCache.set(id, {jd: this._jd, pts});
         return pts;
     }
 
@@ -544,6 +835,8 @@ class OrreryScene {
         this._realTime += dt;
         this._advance(dt);
         this._updateAll(dt);
+        if (this._timelineMode === 'auto' && this._timeline.shown && !this.interacting && !this._timeline.actor.hover)
+            this._timeline.hide();
     }
 
     _updateAll(dt) {
@@ -556,11 +849,15 @@ class OrreryScene {
         if (dt === 0 || this._trailClock >= 1 / TRAIL_HZ) {
             this._trailClock = 0;
             this._updateTrails();
+            if (this._subject()?.tr)
+                this._showHighlight();
         }
         this._hudClock += dt;
         if (dt === 0 || this._hudClock >= 1 / HUD_HZ) {
             this._hudClock = 0;
             this._updateHud();
+        } else {
+            this._timeline.setTime(this._jd);
         }
         if (this._settings.get_boolean('pixel-shift')) {
             const t = this._realTime;
@@ -575,6 +872,7 @@ class OrreryScene {
 
     _updateBodies() {
         const spinDay = this._settings.get_double('seconds-per-earth-day');
+        const spinning = this._spinning();
         const order = [];
         for (const b of this._bodies) {
             const p = b.id === 'sun' ? [0, 0, 0] : A.planetPosition(b.id, this._jd);
@@ -592,8 +890,11 @@ class OrreryScene {
                 continue;
 
             // Spin: one Earth day lasts spinDay seconds; others in proportion.
-            const hours = BODY[b.id].rotationHours;
-            b.phase = wrapAngle(2 * Math.PI * this._realTime / (Math.abs(hours) / 23.9345 * spinDay) * Math.sign(hours));
+            // When spinning is off, the planets keep the face they had.
+            if (spinning) {
+                const hours = BODY[b.id].rotationHours;
+                b.phase = wrapAngle(2 * Math.PI * this._realTime / (Math.abs(hours) / 23.9345 * spinDay) * Math.sign(hours));
+            }
             b.light = A.unit(this._proj.view(A.scale(p, -1)));
             // Redraw only when something moved by most of a pixel, at most 20 times a second.
             if (b.drawn === null || (Math.abs(wrapAngle(b.phase - b.drawn.phase)) * b.R > 0.8 &&
@@ -650,8 +951,11 @@ class OrreryScene {
     _updateCraft() {
         const show = this._settings.get_boolean('show-missions');
         const showLabels = this._settings.get_boolean('show-labels');
-        const {left, right, top, bottom} = this._area;
+        const sunlight = this._settings.get_boolean('sunlight-view');
+        const {left, right, top} = this._area;
+        const bottom = this._timelineMode === 'never' ? this._area.bottom : this._timeline.actor.y - 4;
         const inset = 10;
+        const placed = [];   // edge labels so far, so they do not overlap
         for (const tr of this._trajectories) {
             if (!tr.marker)
                 continue;
@@ -677,13 +981,16 @@ class OrreryScene {
             const onScreen = x > left + inset && x < right - inset && y > top + inset && y < bottom - inset;
             tr.marker.area.visible = onScreen;
             tr.marker.moveTo(x, y);
-            tr.label.visible = onScreen && showLabels;
+            const featured = sameSubject(this._selected, {tr}) || sameSubject(this._hover, {tr});
+            tr.label.visible = onScreen && (showLabels || featured);
             if (tr.label.visible) {
                 // Far craft can project near the Sun when they climb out of
                 // the ecliptic toward or away from the camera; say how far.
-                const r = seg.kind === 'stay' ? 0 : A.norm(seg.pos(this._jd));
+                const r = A.norm(seg.pos(this._jd));
                 const name = tr.mission.short ?? tr.mission.name;
-                const text = r > 40 ? `${name} · ${r.toFixed(0)} AU` : name;
+                let text = r > 40 && seg.kind !== 'stay' ? `${name} · ${r.toFixed(0)} AU` : name;
+                if (sunlight)
+                    text += ` · ${A.formatRatio(A.irradiance(r) / A.SOLAR_CONSTANT)} sun`;
                 if (tr.label.text !== text)
                     tr.label.text = text;
                 tr.label.set_translation(Math.round(x + 7), Math.round(y - 7), 0);
@@ -704,13 +1011,19 @@ class OrreryScene {
                 const ty = sy > 0 ? (bottom - inset - cy) / sy : sy < 0 ? (top + inset - cy) / sy : Infinity;
                 const k = Math.min(tx, ty);
                 const ex = Math.max(left + inset, Math.min(right - inset - w, cx + sx * k - (sx > 0 ? w : 0)));
-                const ey = Math.max(top + inset, Math.min(bottom - inset - h, cy + sy * k - (sy > 0 ? h : 0)));
+                let ey = Math.max(top + inset, Math.min(bottom - inset - h, cy + sy * k - (sy > 0 ? h : 0)));
+                // Step inward, away from the edge, past any label already there.
+                const step = (ey > cy ? -1 : 1) * (h + 2);
+                while (placed.some(([x0, y0, x1, y1]) => ex < x1 && ex + w > x0 && ey < y1 && ey + h > y0))
+                    ey += step;
+                placed.push([ex, ey, ex + w, ey + h]);
                 tr.edge.set_translation(Math.round(ex), Math.round(ey), 0);
             }
         }
     }
 
     _updateTrails() {
+        this._trailHits = [];
         if (!this._settings.get_boolean('show-trails') || !this._settings.get_boolean('show-missions')) {
             this._trails.hide();
             return;
@@ -747,6 +1060,7 @@ class OrreryScene {
             if (pts.length < 2 && ahead.length < 2)
                 continue;
             draws.push({pts, ahead, rgb: tr.rgb});
+            this._trailHits.push({tr, pts: pts.filter(p => p[2] > 0.08)});
             for (const p of pts) {
                 if (p[2] > 0.01)
                     all.push(p);
@@ -769,14 +1083,15 @@ class OrreryScene {
     // ---- Events and fact cards ----
 
     _fireEvents() {
-        if (!this._events || this._settings.get_string('mode') === 'live')
+        if (!this._events || (this._live() && !this._browsing))
             return;
         while (this._eventIndex < this._events.length && this._events[this._eventIndex].t <= this._jd) {
             const ev = this._events[this._eventIndex++];
             if (!this._settings.get_boolean('show-missions') || !this._settings.get_boolean('show-facts'))
                 continue;
-            // Skip events left far behind (e.g. after the replay speed was raised).
-            if (this._jd - ev.t > 120)
+            // Skip events left far behind (e.g. after the replay speed was
+            // raised) and the ones swept past while dragging the timeline.
+            if (this._jd - ev.t > 120 || this._timeline.dragging)
                 continue;
             this._queueEvent(ev);
         }
@@ -784,7 +1099,11 @@ class OrreryScene {
 
     _queueEvent(ev) {
         const tr = this._trajectories.find(t => t.mission === ev.mission);
-        const card = new Card(this._hud, eventCard(ev), ev.mission.color, this._cardWidth);
+        const card = new Card(this._hud, eventCard(ev), ev.mission.color, this._cardWidth, {
+            interactive: this._interactive(),
+            onActivate: tr ? () => this._select({tr}, {expand: true}) : null,
+            onResize: () => this._stackEventCards(),
+        });
         this._eventCards.unshift({card, ev, tr, age: 0});
         while (this._eventCards.length > 3)
             this._eventCards.pop().card.dismiss();
@@ -822,9 +1141,11 @@ class OrreryScene {
 
     _updateCards(dt) {
         const showFacts = this._settings.get_boolean('show-facts');
-        // Event cards follow their craft and expire.
+        // Event cards follow their craft and expire, unless the pointer is
+        // resting on them.
         for (const c of [...this._eventCards]) {
-            c.age += dt;
+            if (!c.card.box.hover)
+                c.age += dt;
             if (c.age > EVENT_CARD_SECONDS || !showFacts) {
                 c.card.dismiss();
                 this._eventCards.splice(this._eventCards.indexOf(c), 1);
@@ -838,29 +1159,38 @@ class OrreryScene {
                 c.card.aim(target[0], target[1], 6);
         }
 
+        // A pinned card stays until closed and follows its subject.
+        if (this._pin) {
+            this._aim(this._pin, this._selected);
+            return;
+        }
         if (!showFacts) {
             this._factCard?.dismiss();
             this._factCard = null;
-            this._hideHighlight();
+            this._factSubject = null;
+            this._showHighlight();
             return;
         }
-        this._factClock += dt;
+        if (!this._factCard?.box.hover)
+            this._factClock += dt;
         if (!this._factCard || this._factClock > this._settings.get_double('fact-interval')) {
             this._factClock = 0;
             this._nextFact();
         }
-        const f = this._factCard;
-        if (f) {
-            const target = this._factTarget();
-            f.leader.visible = !!target;
-            f.ring.visible = !!target;
-            if (target)
-                f.aim(target[0], target[1], target[2]);
-        }
+        if (this._factCard)
+            this._aim(this._factCard, this._factSubject);
     }
 
-    _factTarget() {
-        const subject = this._factSubject;
+    _aim(card, subject) {
+        const target = this._target(subject);
+        card.leader.visible = !!target;
+        card.ring.visible = !!target;
+        if (target)
+            card.aim(target[0], target[1], target[2]);
+    }
+
+    // Where a subject is on screen: [x, y, radius], or null if hidden.
+    _target(subject) {
         if (!subject)
             return null;
         if (subject.tr) {
@@ -904,28 +1234,330 @@ class OrreryScene {
             content = this._facts.card(id, jd);
         }
         this._factSubject = subject;
-        this._factColor = color;
-        const card = new Card(this._hud, content, color, this._cardWidth);
+        // Clicking a fact card pins it and opens it up.
+        const card = new Card(this._hud, content, color, this._cardWidth, {
+            interactive: this._interactive(),
+            onActivate: () => this._select(subject, {expand: true}),
+        });
         card.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
         this._factCard = card;
-        this._showHighlight(subject, color);
+        this._showHighlight();
     }
 
-    _showHighlight(subject, color) {
-        const rgb = R.hexToRgb(color);
+    // ---- Selection ----
+
+    _interactive() {
+        return this._settings.get_boolean('interactive');
+    }
+
+    _subject() {
+        return this._selected ?? this._factSubject;
+    }
+
+    _subjectColor(subject) {
+        return subject.tr ? subject.tr.mission.color : BODY[subject.id].color;
+    }
+
+    _details(subject, maxEvents = 8) {
+        const sunlightView = this._settings.get_boolean('sunlight-view');
+        return subject.tr
+            ? missionDetails(subject.tr, this._jd, {maxEvents})
+            : bodyDetails(subject.id, this._jd, {sunlightView});
+    }
+
+    // Pin a card for a subject; toggle: a second click on it lets go.
+    _select(subject, {expand = false, toggle = false} = {}) {
+        if (toggle && sameSubject(subject, this._selected)) {
+            this._deselect();
+            return;
+        }
+        if (sameSubject(subject, this._selected)) {
+            if (expand)
+                this._pin.setExpanded(true);
+            return;
+        }
+        const wasExpanded = this._pin?.expanded;
+        this._pin?.dismiss();
+        this._pin = null;
+        this._factCard?.dismiss();
+        this._factCard = null;
+        this._factSubject = null;
+        this._selected = subject;
+        this._trim = null;
+        this._pin = new Card(this._hud, this._details(subject), this._subjectColor(subject), this._cardWidth, {
+            expanded: expand || wasExpanded,
+            onClose: () => this._deselect(),
+            onEvent: ev => this._seek(ev.t, true, ev),
+            onResize: () => this._fitPin(),
+        });
+        this._pin.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
+        this._fitPin();
+        this._aim(this._pin, subject);
+        this._showHighlight();
+        this._updateHud();
+    }
+
+    _deselect() {
+        if (!this._selected)
+            return;
+        this._pin?.dismiss();
+        this._pin = null;
+        this._selected = null;
+        // The next fact card comes along shortly.
+        this._factClock = this._settings.get_double('fact-interval') - 2;
+        this._showHighlight();
+        this._updateHud();
+    }
+
+    // Keep an expanded card clear of the event cards: drop trivia, then
+    // events, until it fits.
+    _fitPin() {
+        const pin = this._pin;
+        if (!pin || this._fitting)
+            return;
+        const avail = this._area.bottom - this._area.top - 2 * this._margin - 160;
+        if (!pin.expanded || pin.height <= avail)
+            return;
+        this._fitting = true;
+        const content = this._details(this._selected);
+        this._trim = {notes: content.notes?.length ?? 0, events: content.events?.length ?? 0};
+        while (pin.height > avail && (this._trim.notes > 0 || this._trim.events > 3)) {
+            if (this._trim.notes > 0)
+                this._trim.notes--;
+            else
+                this._trim.events--;
+            pin.update(this._trimmed(content));
+        }
+        this._fitting = false;
+    }
+
+    _trimmed(content) {
+        if (!this._trim)
+            return content;
+        return {...content, notes: content.notes?.slice(0, this._trim.notes), events: content.events && this._details(this._selected, this._trim.events).events};
+    }
+
+    _refreshPin() {
+        if (this._pin && this._selected)
+            this._pin.update(this._trimmed(this._details(this._selected)));
+    }
+
+    // Path for the current subject: a brighter orbit, or the craft's whole
+    // flight, flown part solid and the rest dashed.
+    _showHighlight() {
+        const subject = this._subject();
+        if (!subject || !this._proj) {
+            this._highlight.hide();
+            return;
+        }
+        const rgb = R.hexToRgb(this._subjectColor(subject));
+        const strong = !!this._selected;
         if (subject.tr) {
-            const pts = subject.tr.projected.filter(([, , t]) => t <= this._jd);
-            this._highlight.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.3, 1.2));
-        } else if (subject.id !== 'sun' && this._settings.get_boolean('show-orbits')) {
+            const past = subject.tr.projected.filter(([, , t]) => t <= this._jd);
+            const future = strong ? subject.tr.projected.filter(([, , t]) => t >= this._jd) : [];
+            if (subject.tr.now && past.length)
+                past.push(subject.tr.now);
+            this._highlight.update([...past, ...future], [this._W, this._H], cr => {
+                R.strokePath(cr, past, rgb, strong ? 0.5 : 0.3, strong ? 1.6 : 1.2);
+                R.strokePath(cr, future, rgb, 0.22, 1, [3, 4]);
+            });
+        } else if (subject.id !== 'sun' && (strong || this._settings.get_boolean('show-orbits'))) {
             const pts = this._orbitPath(subject.id);
-            this._highlight.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.5, 1.4));
+            this._highlight.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, strong ? 0.7 : 0.5, strong ? 1.8 : 1.4));
         } else {
-            this._hideHighlight();
+            this._highlight.hide();
         }
     }
 
-    _hideHighlight() {
-        this._highlight.hide();
+    // ---- Pointer ----
+
+    _connectInput() {
+        this.actor.connect('motion-event', (_a, event) => {
+            const [sx, sy] = event.get_coords();
+            const [, x, y] = this.actor.transform_stage_point(sx, sy);
+            this._activity();
+            // Over a card or the timeline, nothing in the scene is hovered.
+            const onScene = global.stage.get_event_actor(event) === this.actor;
+            this._setHover(onScene ? this._hitTest(x, y) : null, {x, y});
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this.actor.connect('leave-event', () => {
+            this._setHover(null);
+            return Clutter.EVENT_PROPAGATE;
+        });
+        // Clicks that land on a card or a button are theirs; let them be.
+        const own = event => global.stage.get_event_actor(event) === this.actor;
+        this.actor.connect('button-press-event', (_a, event) => {
+            if (!own(event))
+                return Clutter.EVENT_PROPAGATE;
+            this._press = event.get_coords();
+            if (event.get_button() === Clutter.BUTTON_SECONDARY)
+                this._openBackgroundMenu(...this._press);
+            return Clutter.EVENT_STOP;
+        });
+        this.actor.connect('button-release-event', (_a, event) => {
+            if (!own(event))
+                return Clutter.EVENT_PROPAGATE;
+            const [sx, sy] = event.get_coords();
+            if (event.get_button() !== Clutter.BUTTON_PRIMARY || !this._press ||
+                Math.hypot(sx - this._press[0], sy - this._press[1]) > 6)
+                return Clutter.EVENT_STOP;
+            this._press = null;
+            const [, x, y] = this.actor.transform_stage_point(sx, sy);
+            const hit = this._hitTest(x, y);
+            if (hit)
+                this._select(hit, {toggle: true});
+            else
+                this._deselect();
+            return Clutter.EVENT_STOP;
+        });
+    }
+
+    // We cover the wallpaper, so pass right clicks on to its menu.
+    _openBackgroundMenu(x, y) {
+        const bg = Main.layoutManager._bgManagers?.[Main.layoutManager.primaryIndex]?.backgroundActor;
+        const menu = bg?._backgroundMenu;
+        if (!menu)
+            return;
+        Main.layoutManager.setDummyCursorGeometry(x, y, 0, 0);
+        menu.open(BoxPointer.PopupAnimation.FULL);
+    }
+
+    _activity() {
+        this._lastActivity = this._realTime;
+        this._browseClock = 0;
+        if (this._timelineMode === 'auto' && !this._timeline.shown) {
+            this._timeline.show();
+            this._syncTimelineState();
+        }
+        this.onActivity?.();
+    }
+
+    // What is under the pointer: a craft, a body, an orbit or a trail.
+    _hitTest(x, y) {
+        if (!this._proj)
+            return null;
+        let best = null, bestD = Infinity;
+        for (const tr of this._trajectories) {
+            if (!tr.now || !tr.marker?.area.visible)
+                continue;
+            const d = Math.hypot(x - tr.now[0], y - tr.now[1]);
+            if (d < 10 && d < bestD)
+                [best, bestD] = [{tr}, d];
+        }
+        if (best)
+            return best;
+        for (const b of this._bodies) {
+            const d = Math.hypot(x - b.x, y - b.y);
+            const reach = Math.max(b.R + 5, 11);
+            if (d < reach && d / reach < bestD)
+                [best, bestD] = [{id: b.id}, d / reach];
+        }
+        if (best)
+            return best;
+        bestD = 6;
+        if (this._settings.get_boolean('show-orbits')) {
+            for (const b of this._bodies.slice(1)) {
+                const d = polylineDistance(this._orbitPath(b.id), x, y);
+                if (d < bestD)
+                    [best, bestD] = [{id: b.id}, d];
+            }
+        }
+        for (const {tr, pts} of this._trailHits ?? []) {
+            const d = polylineDistance(pts, x, y);
+            if (d < bestD)
+                [best, bestD] = [{tr}, d];
+        }
+        return best;
+    }
+
+    _setHover(subject, {x, y, fromList = false} = {}) {
+        if (!sameSubject(subject, this._hover) && (subject || this._hover)) {
+            const old = this._hover;
+            this._hover = subject;
+            const labelOf = s => s && !s.tr ? this._bodyById(s.id)?.label : null;
+            labelOf(old)?.remove_style_class_name('orrery-label-hover');
+            labelOf(subject)?.add_style_class_name('orrery-label-hover');
+            this.actor.set_cursor_type(subject && !fromList ? Clutter.CursorType.POINTER : Clutter.CursorType.DEFAULT);
+            this._drawHover();
+            if (!fromList)
+                this._showTooltip(subject ? this._hoverText(subject) : null);
+        }
+        if (subject && x !== undefined && !fromList)
+            this._placeTooltip(x + 14, y + 16);
+    }
+
+    _hoverText(subject) {
+        const jd = this._jd;
+        if (subject.tr) {
+            const p = subject.tr.position(jd);
+            const name = subject.tr.mission.short ?? subject.tr.mission.name;
+            return p ? `${name} · ${A.norm(p).toFixed(A.norm(p) < 10 ? 2 : 0)} AU from the Sun` : name;
+        }
+        if (subject.id === 'sun')
+            return 'The Sun';
+        const r = A.norm(A.planetPosition(subject.id, jd));
+        const sunlight = this._settings.get_boolean('sunlight-view') ? ` · ${A.formatIrradiance(A.irradiance(r))}` : '';
+        return `${BODY[subject.id].name} · ${r.toFixed(2)} AU${sunlight}`;
+    }
+
+    _drawHover() {
+        const h = this._hover;
+        if (!h || sameSubject(h, this._subject())) {
+            this._hoverPath.hide();
+            return;
+        }
+        const rgb = R.hexToRgb(this._subjectColor(h));
+        if (h.tr) {
+            const pts = h.tr.projected.filter(([, , t]) => t <= this._jd);
+            if (h.tr.now && pts.length)
+                pts.push(h.tr.now);
+            this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.35, 1.3));
+        } else if (h.id !== 'sun') {
+            const pts = this._orbitPath(h.id);
+            this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.45, 1.4));
+        } else {
+            this._hoverPath.hide();
+        }
+    }
+
+    _showTooltip(text) {
+        const tip = this._tooltip;
+        if (!text) {
+            if (tip.visible)
+                tip.ease({opacity: 0, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD, onComplete: () => tip.hide()});
+            return;
+        }
+        tip.text = text;
+        tip.remove_all_transitions();
+        tip.show();
+        this._hud.set_child_above_sibling(tip, null);
+        tip.ease({opacity: 255, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+    }
+
+    _placeTooltip(x, y) {
+        const w = this._tooltip.get_preferred_width(-1)[1];
+        const {left, right, top, bottom} = this._area;
+        this._tooltip.set_position(
+            Math.round(Math.max(left + 4, Math.min(right - w - 4, x))),
+            Math.round(Math.max(top + 4, Math.min(bottom - 28, y))));
+    }
+
+    _timelineHover(h) {
+        if (!h) {
+            this._showTooltip(null);
+            return;
+        }
+        let text = h.text;
+        if (!text && h.ev)
+            text = `${A.formatDate(h.ev.t)} · ${h.ev.mission.short ?? h.ev.mission.name} · ${eventTitle(h.ev)}`;
+        else if (!text)
+            text = A.formatMonth(h.t);
+        this._showTooltip(text);
+        const w = this._tooltip.get_preferred_width(-1)[1];
+        const [, ty] = this._timeline.actor.get_position();
+        const x = h.x - this.actor.get_transformed_position()[0] - w / 2;
+        this._placeTooltip(x, ty - 30);
     }
 
     onSettingChanged(key) {
@@ -935,24 +1567,39 @@ class OrreryScene {
                 tr.label?.destroy();
                 tr.edge?.destroy();
             }
+            if (this._selected?.tr)
+                this._deselect();
             this._buildTrajectories();
             this._buildCraft();
+            this._timelineRange();
             this._updateAll(0);
         } else if (key === 'mode' || key === 'replay-start-year') {
             this._settings.set_double('replay-jd', 0);
             this._resetTime();
+            this._playing = true;
             this._backdrop.queue_repaint();
+            this._timelineRange();
+            this._syncTimelineState();
             this._updateAll(0);
         } else if (key === 'replay-jd') {
             // Set to 0 by the preferences' Restart button.
-            if (this._settings.get_double('replay-jd') === 0 && this._settings.get_string('mode') === 'replay') {
+            if (this._settings.get_double('replay-jd') === 0 && !this._live()) {
                 this._resetTime();
+                this._playing = true;
                 this._updateAll(0);
             }
         } else if (key === 'brightness') {
             this._content.opacity = this._opacity();
         } else if (key === 'trail-years' || key === 'show-trails') {
             this._updateTrails();
+        } else if (key === 'sunlight-view') {
+            this._backdrop.queue_repaint();
+            this._layoutSunlight();
+            this._syncTimelineState();
+            this._updateAll(0);
+        } else if (key === 'days-per-second') {
+            this._syncTimelineState();
+            this._updateHud();
         }
     }
 }
@@ -961,6 +1608,7 @@ export default class OrreryExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._scene = new OrreryScene(this._settings);
+        this._scene.onActivity = () => this._wake();
 
         // Inside the background group: above the wallpaper, below every window.
         const bgGroup = Main.layoutManager._backgroundGroup;
@@ -973,16 +1621,20 @@ export default class OrreryExtension extends Extension {
         this._settings.connectObject('changed', (_s, key) => {
             if (RELAYOUT_KEYS.includes(key))
                 this._queueRelayout();
-            else if (key === 'fps' || key === 'pause-when-covered')
+            else if (SCHEDULE_KEYS.includes(key))
                 this._schedule();
             else
                 this._scene.onSettingChanged(key);
+            if (key === 'spin-planets')
+                this._schedule();
         }, this);
+        this._power = new PowerMonitor(() => this._schedule());
 
         this._relayout();
         this._lastTick = GLib.get_monotonic_time();
         this._coveredClock = 0;
         this._paused = false;
+        this._idle = false;
         this._schedule();
     }
 
@@ -996,10 +1648,12 @@ export default class OrreryExtension extends Extension {
         this._timer = this._relayoutId = this._raiseId = 0;
 
         if (this._scene && this._settings.get_string('mode') === 'replay')
-            this._settings.set_double('replay-jd', this._scene.jd);
+            this._settings.set_double('replay-jd', Math.min(this._scene.jd, A.jdNow()));
         Main.layoutManager.disconnectObject(this);
         global.display.disconnectObject(this);
         this._settings.disconnectObject(this);
+        this._power?.destroy();
+        this._power = null;
         this._scene?.destroy();
         this._scene = null;
         this._settings = null;
@@ -1039,11 +1693,47 @@ export default class OrreryExtension extends Extension {
         });
     }
 
+    // On battery or in power-saver mode.
+    get _saving() {
+        return this._settings.get_boolean('battery-saver') && !!(this._power?.onBattery || this._power?.powerSaver);
+    }
+
+    _fps() {
+        const s = this._settings;
+        let fps = s.get_int('fps');
+        if (this._saving)
+            fps = Math.min(fps, s.get_int('battery-fps'));
+        if (this._idle)
+            fps = Math.min(fps, IDLE_FPS);
+        if (s.get_boolean('adaptive-fps') && this._scene?.still)
+            fps = Math.min(fps, STILL_FPS);
+        return fps;
+    }
+
+    _interval() {
+        return this._paused ? 1000 : Math.round(1000 / this._fps());
+    }
+
     _schedule() {
+        if (!this._settings)
+            return;
+        if (this._scene)
+            this._scene.powerSaving = this._saving;
         if (this._timer)
             GLib.source_remove(this._timer);
-        const interval = this._paused ? 1000 : Math.round(1000 / this._settings.get_int('fps'));
-        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => this._tick());
+        this._intervalMs = this._interval();
+        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._intervalMs, () => this._tick());
+    }
+
+    // The pointer moved over the desktop: come back to full speed now
+    // rather than at the next once-a-second check.
+    _wake() {
+        if (this._idle) {
+            this._idle = false;
+            this._scene.setDim(1);
+        }
+        if (this._interval() !== this._intervalMs)
+            this._schedule();
     }
 
     _tick() {
@@ -1051,15 +1741,25 @@ export default class OrreryExtension extends Extension {
         const dt = Math.min(0.25, (now - this._lastTick) / 1e6);
         this._lastTick = now;
 
-        // Check about once a second whether anyone can see the desktop.
+        // About once a second: can anyone see the desktop, is anyone there,
+        // and is anything moving?
         this._coveredClock += dt;
         if (this._paused || this._coveredClock >= 1) {
             this._coveredClock = 0;
-            const paused = this._settings.get_boolean('pause-when-covered') && this._isCovered();
-            if (paused !== this._paused) {
-                this._paused = paused;
+            const s = this._settings;
+            const paused = s.get_boolean('pause-when-covered') && this._coverage() * 100 >= s.get_int('pause-coverage');
+            const minutes = s.get_int('idle-dim-minutes');
+            const idle = minutes > 0 && global.backend.get_core_idle_monitor().get_idletime() > minutes * 60000;
+            if (idle !== this._idle) {
+                this._idle = idle;
+                this._scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1);
+            }
+            this._paused = paused;
+            if (this._interval() !== this._intervalMs) {
                 this._timer = 0;   // this source ends by returning REMOVE
                 this._schedule();
+                if (!this._paused)
+                    this._scene.tick(dt);
                 return GLib.SOURCE_REMOVE;
             }
         }
@@ -1068,22 +1768,42 @@ export default class OrreryExtension extends Extension {
         return GLib.SOURCE_CONTINUE;
     }
 
-    _isCovered() {
+    // How much of the desktop windows hide, 0 to 1. Maximized and fullscreen
+    // windows count as all of it; otherwise sample a grid over the monitor.
+    _coverage() {
         if (Main.overview.visible || Main.sessionMode.isLocked || Main.screenShield?.locked)
-            return true;
-        const monitor = Main.layoutManager.primaryIndex;
+            return 1;
+        const index = Main.layoutManager.primaryIndex;
+        const area = Main.layoutManager.getWorkAreaForMonitor(index);
         const workspace = global.workspace_manager.get_active_workspace();
+        const rects = [];
         for (const w of workspace.list_windows()) {
-            if (w.minimized || w.get_monitor() !== monitor || !w.showing_on_its_workspace())
+            if (w.minimized || w.get_monitor() !== index || !w.showing_on_its_workspace())
+                continue;
+            const type = w.get_window_type();
+            if (type === Meta.WindowType.DESKTOP || type === Meta.WindowType.DOCK)
                 continue;
             if (w.is_fullscreen())
-                return true;
+                return 1;
             const maximized = typeof w.is_maximized === 'function'
                 ? w.is_maximized()
                 : w.get_maximized() === Meta.MaximizeFlags.BOTH;
             if (maximized)
-                return true;
+                return 1;
+            rects.push(w.get_frame_rect());
         }
-        return false;
+        if (!rects.length)
+            return 0;
+        const [nx, ny] = [32, 18];
+        let hidden = 0;
+        for (let i = 0; i < nx; i++) {
+            const x = area.x + (i + 0.5) * area.width / nx;
+            for (let j = 0; j < ny; j++) {
+                const y = area.y + (j + 0.5) * area.height / ny;
+                if (rects.some(r => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height))
+                    hidden++;
+            }
+        }
+        return hidden / (nx * ny);
     }
 }

@@ -3,7 +3,9 @@
 import System from 'system';
 
 import * as A from '../lib/astro.js';
+import {bodyDetails, missionDetails} from '../lib/facts.js';
 import {buildTrajectories} from '../lib/missions.js';
+import {sunlightColor} from '../lib/render.js';
 
 let failed = 0;
 function check(ok, name) {
@@ -83,6 +85,40 @@ check(proj.project([0, 1, 0])[1] < 100, 'top-down: +y is up the screen');
 
 check(A.formatDuration(500) === '8 min 20 s', 'formatDuration minutes');
 check(A.formatDuration(4.1 * 3600) === '4 h 6 min', 'formatDuration hours');
+
+// Sunlight: inverse square, and the view's flattening of the ecliptic.
+check(A.irradiance(1) === A.SOLAR_CONSTANT, 'irradiance at 1 AU is the solar constant');
+check(near(A.irradiance(30.07), 1.505, 0.01), 'about 1.5 W/m² at Neptune');
+check(near(A.irradiance(A.irradianceRadius(100)), 100, 1e-9), 'irradianceRadius inverts irradiance');
+check(A.formatIrradiance(1361) === '1,361 W/m²' && A.formatIrradiance(1.505) === '1.5 W/m²', 'formatIrradiance');
+check(A.formatRatio(475) === '475×' && A.formatRatio(0.43) === '0.43×' && A.formatRatio(1 / 900) === '1/900', 'formatRatio');
+check(near(new A.Projection({cx: 0, cy: 0, fitPx: 1, tilt: 60}).squash, 0.5, 1e-12), 'projection squash is cos(tilt)');
+{
+    let rising = true;
+    for (let e = 1; e < 30000; e *= 1.5)
+        rising &&= sunlightColor(e * 1.5)[3] >= sunlightColor(e)[3];
+    check(rising, 'sunlight field grows brighter toward the Sun');
+}
+check(near(A.inclinationDeg(A.planetOrbit('mercury', A.J2000)), 7.0, 0.05), 'Mercury inclination');
+
+// Card content.
+{
+    const t = A.jd('2024-12-24');
+    const mars = bodyDetails('mars', t);
+    check(mars.lines.length === 2 && mars.stats.length >= 12 && mars.notes.length > 0, 'Mars details have lines, stats and notes');
+    check(bodyDetails('earth', t).stats.every(([k]) => k !== 'From Earth'), 'Earth is not measured from itself');
+    const sun = bodyDetails('sun', t);
+    check(sun.title === 'The Sun' && sun.stats.length > 0, 'Sun details');
+    const parker = buildTrajectories().find(x => x.mission.id === 'parker');
+    const pd = missionDetails(parker, t);
+    const sunlight = pd.stats.find(([k]) => k === 'Sunlight')?.[1] ?? '';
+    check(/^\d{3},\d{3} W\/m²/.test(sunlight) && parseInt(sunlight.split('W/m², ')[1]) > 400,
+        `Parker at perihelion gets hundreds of times Earth's sunlight (${sunlight})`);
+    const mid = missionDetails(parker, A.jd('2021-06-01')).events;
+    check(mid.length === 8 && mid.some(e => e.past) && mid.some(e => !e.past), 'mission events split past and future');
+    check(pd.events.at(-1).ev === parker.events.filter(e => e.kind !== 'point' || e.title).at(-1), 'after the last event, the list ends with it');
+    check(missionDetails(parker, A.jd('2010-01-01')).lines[0].startsWith('Launches'), 'before launch says when it launches');
+}
 
 print(failed ? `\n${failed} failed` : '\nall passed');
 System.exit(failed ? 1 : 0);

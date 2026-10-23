@@ -67,6 +67,25 @@
     </key>
     <key name="disabled-missions" type="as"><default>[]</default></key>
 
+    <!-- Interaction -->
+    <key name="interactive" type="b">
+      <default>true</default>
+      <summary>Hover and click planets, orbits and spacecraft on the desktop</summary>
+    </key>
+    <key name="timeline" type="s">
+      <choices><choice value="auto"/><choice value="always"/><choice value="never"/></choices>
+      <default>'auto'</default>
+      <summary>Show the timeline: when the pointer moves over the desktop, always, or never</summary>
+    </key>
+    <key name="sunlight-view" type="b">
+      <default>false</default>
+      <summary>Color the plane of the planets by how much sunlight falls there</summary>
+    </key>
+    <key name="spin-planets" type="b">
+      <default>true</default>
+      <summary>Turn the planets on their axes</summary>
+    </key>
+
     <!-- Power and OLED care -->
     <key name="fps" type="i">
       <range min="10" max="60"/><default>30</default>
@@ -74,6 +93,29 @@
     <key name="pause-when-covered" type="b">
       <default>true</default>
       <summary>Stop animating while a maximized or fullscreen window, the overview or the lock screen hides the desktop</summary>
+    </key>
+    <key name="pause-coverage" type="i">
+      <range min="30" max="100"/><default>90</default>
+      <summary>Pause once windows hide at least this percentage of the desktop</summary>
+    </key>
+    <key name="battery-saver" type="b">
+      <default>true</default>
+      <summary>On battery or in power-saver mode, lower the frame rate and stop the planets spinning</summary>
+    </key>
+    <key name="battery-fps" type="i">
+      <range min="5" max="60"/><default>15</default>
+    </key>
+    <key name="adaptive-fps" type="b">
+      <default>true</default>
+      <summary>Drop to a few frames per second while nothing on screen is moving</summary>
+    </key>
+    <key name="idle-dim-minutes" type="i">
+      <range min="0" max="60"/><default>3</default>
+      <summary>Dim the scene after this many minutes without input (0 never)</summary>
+    </key>
+    <key name="idle-brightness" type="d">
+      <range min="5" max="100"/><default>40</default>
+      <summary>Brightness while dimmed, percent of normal</summary>
     </key>
     <key name="pixel-shift" type="b">
       <default>true</default>

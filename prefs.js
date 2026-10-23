@@ -15,6 +15,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
         window.add(this._viewPage());
         window.add(this._contentPage());
         window.add(this._missionsPage());
+        window.add(this._powerPage());
     }
 
     // ---- Row helpers ----
@@ -51,6 +52,12 @@ export default class OrreryPreferences extends ExtensionPreferences {
         return row;
     }
 
+    // Grey a row out unless a switch is on.
+    _dependsOn(row, key) {
+        this._settings.bind(key, row, 'sensitive', Gio.SettingsBindFlags.GET);
+        return row;
+    }
+
     _group(title, rows, description = '') {
         const group = new Adw.PreferencesGroup({title, description});
         for (const row of rows)
@@ -79,15 +86,11 @@ export default class OrreryPreferences extends ExtensionPreferences {
             restart,
         ]));
         page.add(this._group('Spin', [
-            this._spin('One Earth day lasts', 'seconds-per-earth-day', 2, 600, 1,
+            this._switch('Spin the planets', 'spin-planets'),
+            this._dependsOn(this._spin('One Earth day lasts', 'seconds-per-earth-day', 2, 600, 1,
                 'Seconds per turn of the Earth. Jupiter turns 2.4 times as fast; Venus takes 243 times as long, backwards'),
+            'spin-planets'),
         ], 'Planets spin at their true speeds relative to each other, on their own slower clock so the fast ones do not blur.'));
-        page.add(this._group('Power and OLED care', [
-            this._spin('Frames per second', 'fps', 10, 60, 5),
-            this._switch('Pause when hidden', 'pause-when-covered',
-                'Stop animating behind maximized or fullscreen windows, the overview and the lock screen'),
-            this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
-        ]));
         return page;
     }
 
@@ -124,10 +127,55 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._spin('Each fact stays up for', 'fact-interval', 5, 120, 1, 'Seconds'),
             this._switch('Date and mission list', 'show-hud'),
         ]));
+        page.add(this._group('Interaction', [
+            this._switch('Interactive desktop', 'interactive',
+                'Hover over planets, orbits and spacecraft to trace them; click to pin a card with live numbers. Right-click still opens the desktop menu'),
+            this._dependsOn(this._combo('Timeline', 'timeline', [
+                ['auto', 'When the pointer is on the desktop'],
+                ['always', 'Always'],
+                ['never', 'Never'],
+            ], 'Scrub through time, change speed and jump to mission events'), 'interactive'),
+            this._switch('Sunlight view', 'sunlight-view',
+                'Color the plane of the planets by how much sunlight falls there, from 9,000 W/m² at Mercury to 1.5 at Neptune'),
+        ]));
         page.add(this._group('Spacecraft', [
             this._switch('Spacecraft', 'show-missions'),
             this._switch('Trails', 'show-trails'),
             this._spin('Trail length', 'trail-years', 0.5, 60, 0.5, 'Years of path kept on screen', 1),
+        ]));
+        return page;
+    }
+
+    _powerPage() {
+        const page = new Adw.PreferencesPage({title: 'Power', icon_name: 'battery-good-symbolic'});
+        page.add(this._group('Frame rate', [
+            this._spin('Frames per second', 'fps', 10, 60, 5),
+            this._switch('Slow down when still', 'adaptive-fps',
+                'Drop to 5 frames per second while time is paused, the planets are not spinning and the pointer is away'),
+        ]));
+        page.add(this._group('Hidden desktop', [
+            this._switch('Pause when hidden', 'pause-when-covered',
+                'Stop animating behind windows, the overview and the lock screen'),
+            this._dependsOn(this._spin('Pause once windows cover', 'pause-coverage', 30, 100, 5,
+                'Percent of the desktop. Maximized and fullscreen windows always count as all of it'), 'pause-when-covered'),
+        ]));
+        page.add(this._group('Battery', [
+            this._switch('Battery saver', 'battery-saver',
+                'On battery or in Power Saver mode, lower the frame rate and stop the planets spinning'),
+            this._dependsOn(this._spin('Frames per second on battery', 'battery-fps', 5, 60, 5), 'battery-saver'),
+        ]));
+        const idleBrightness = this._spin('Dimmed brightness', 'idle-brightness', 5, 100, 5, 'Percent of normal');
+        const syncIdle = () => {
+            idleBrightness.sensitive = this._settings.get_int('idle-dim-minutes') > 0;
+        };
+        syncIdle();
+        this._settings.connect('changed::idle-dim-minutes', syncIdle);
+        page.add(this._group('When you step away', [
+            this._spin('Dim after', 'idle-dim-minutes', 0, 60, 1, 'Minutes without keyboard or mouse input; 0 never dims'),
+            idleBrightness,
+        ], 'Dimming also drops the frame rate to 10. Moving the pointer brings everything back at once.'));
+        page.add(this._group('OLED care', [
+            this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
         ]));
         return page;
     }

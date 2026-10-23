@@ -43,6 +43,94 @@
     spacing: 5px;
 }
 
+.orrery-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.orrery-card-pinned,
+.orrery-card-pinned:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.orrery-card-header {
+    spacing: 4px;
+}
+
+.orrery-card-button {
+    border-radius: 99px;
+    padding: 3px;
+    color: rgba(225, 230, 240, 0.55);
+}
+
+.orrery-card-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(240, 244, 252, 0.9);
+}
+
+.orrery-card-lines,
+.orrery-card-stats,
+.orrery-card-events,
+.orrery-card-notes {
+    spacing: 4px;
+}
+
+.orrery-card-details {
+    spacing: 10px;
+    padding-top: 2px;
+}
+
+.orrery-stat {
+    spacing: 10px;
+}
+
+.orrery-stat-key {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    color: rgba(200, 206, 225, 0.5);
+    min-width: 92px;
+}
+
+.orrery-stat-value {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9.5pt;
+    color: rgba(230, 234, 244, 0.86);
+}
+
+.orrery-card-note {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    color: rgba(215, 220, 235, 0.66);
+}
+
+.orrery-event-row {
+    border-radius: 7px;
+    padding: 2px 6px;
+}
+
+.orrery-event-row:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.orrery-event-row > StBoxLayout {
+    spacing: 8px;
+}
+
+.orrery-event-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 4px;
+}
+
+.orrery-event-text {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    color: rgba(230, 234, 244, 0.85);
+}
+
+.orrery-event-past .orrery-event-text {
+    color: rgba(205, 210, 228, 0.5);
+}
+
 .orrery-card-title {
     font-family: Outfit, Cantarell, sans-serif;
     font-size: 13pt;
@@ -84,6 +172,19 @@
     spacing: 7px;
 }
 
+.orrery-mission-button {
+    border-radius: 7px;
+    padding: 1px 6px;
+}
+
+.orrery-mission-button:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.orrery-mission-selected {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
 .orrery-mission-dot {
     width: 6px;
     height: 6px;
@@ -100,4 +201,138 @@
     font-family: Outfit, Cantarell, sans-serif;
     font-size: 9pt;
     color: rgba(205, 210, 228, 0.55);
+}
+
+.orrery-planet-label.orrery-label-hover {
+    color: rgba(235, 240, 252, 0.95);
+}
+
+.orrery-tooltip {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    color: rgba(235, 238, 248, 0.92);
+    background-color: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    padding: 3px 8px;
+}
+
+/* Timeline */
+
+.orrery-timeline {
+    background-color: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 4px 10px;
+    spacing: 4px;
+}
+
+.orrery-button {
+    border-radius: 99px;
+    padding: 6px;
+    color: rgba(225, 230, 240, 0.62);
+}
+
+.orrery-button:hover {
+    background-color: rgba(255, 255, 255, 0.09);
+    color: rgba(245, 247, 252, 0.95);
+}
+
+.orrery-button:active {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.orrery-button-icon {
+    icon-size: 14px;
+}
+
+.orrery-card-button .orrery-button-icon {
+    icon-size: 12px;
+}
+
+.orrery-toggle.orrery-toggle-on {
+    color: #ffc46b;
+    background-color: rgba(255, 196, 107, 0.14);
+}
+
+.orrery-timeline-speed {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    font-feature-settings: "tnum";
+    color: rgba(205, 210, 228, 0.6);
+    min-width: 52px;
+    text-align: center;
+}
+
+.orrery-timeline-track {
+    margin: 0 8px;
+}
+
+.orrery-timeline-year {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    color: rgba(200, 206, 225, 0.42);
+}
+
+.orrery-timeline-played {
+    background-color: rgba(255, 255, 255, 0.55);
+}
+
+.orrery-timeline-head {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background-color: #ffffff;
+}
+
+.orrery-pill {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: rgba(225, 230, 240, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 99px;
+    padding: 3px 10px;
+}
+
+.orrery-pill:hover {
+    background-color: rgba(255, 255, 255, 0.09);
+    color: rgba(245, 247, 252, 0.95);
+}
+
+.orrery-pill.orrery-toggle-on {
+    color: #8fe3c0;
+    border-color: rgba(143, 227, 192, 0.4);
+}
+
+/* Sunlight view */
+
+.orrery-legend {
+    spacing: 4px;
+}
+
+.orrery-legend-title {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: rgba(255, 210, 150, 0.7);
+}
+
+.orrery-legend-tick {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    color: rgba(215, 220, 235, 0.5);
+}
+
+.orrery-sun-contour {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+}
+
+.orrery-sun-zone {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: rgba(130, 240, 170, 0.6);
 }
