@@ -454,3 +454,59 @@
 .orrery-pill.orrery-back {
     background-color: #000000;
 }
+
+/* The "on the desktop" panel: chips for what is shown */
+
+.orrery-panel {
+    spacing: 6px;
+}
+
+.orrery-panel-heading {
+    spacing: 4px;
+    padding-top: 6px;
+}
+
+.orrery-pill.orrery-pill-small {
+    font-size: 7.5pt;
+    padding: 1px 8px;
+}
+
+.orrery-chip {
+    border-radius: 99px;
+    padding: 3px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(200, 206, 225, 0.42);
+}
+
+.orrery-chip:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+.orrery-chip.orrery-chip-on {
+    border-color: rgba(255, 255, 255, 0.24);
+    background-color: rgba(255, 255, 255, 0.09);
+    color: rgba(240, 244, 252, 0.92);
+}
+
+.orrery-chip-box {
+    spacing: 6px;
+}
+
+.orrery-chip-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+}
+
+.orrery-chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.orrery-chip .orrery-chip-dot {
+    opacity: 90;
+}
+
+.orrery-chip.orrery-chip-on .orrery-chip-dot {
+    opacity: 255;
+}

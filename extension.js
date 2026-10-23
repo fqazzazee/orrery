@@ -19,7 +19,7 @@ import {MISSIONS, buildTrajectories} from './lib/missions.js';
 import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
 import * as R from './lib/render.js';
-import {Card, Timeline, label} from './lib/ui.js';
+import {Card, LayersPanel, Timeline, label} from './lib/ui.js';
 
 const RELAYOUT_KEYS = ['distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
     'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts',
@@ -193,6 +193,7 @@ class OrreryScene {
         this.onActivity = null;
         this.musicState = 'hidden';   // for the timeline's music button
         this.onMusicToggle = null;
+        this.onOpenPrefs = null;
 
         this.actor = new St.Widget({style_class: 'orrery', reactive: false, clip_to_allocation: true});
         this._content = new Clutter.Actor();
@@ -234,6 +235,7 @@ class OrreryScene {
         for (const c of this._eventCards)
             c.card.destroy();
         this._timeline.destroy();
+        this._panel.destroy();
         this.actor.destroy();
     }
 
@@ -531,6 +533,8 @@ class OrreryScene {
             this._focus = this._makeFocus(id);
         }
         this._applyCamera();
+        if (this._panel.isOpen)
+            this._togglePanel(true);
         this._updateAll(0);
         this._showHighlight();
     }
@@ -972,6 +976,8 @@ class OrreryScene {
             sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
             spin: () => this._settings.set_boolean('spin-planets', !this._settings.get_boolean('spin-planets')),
             zoom: dir => this._zoom(dir),
+            layers: () => this._togglePanel(),
+            prefs: () => this.onOpenPrefs?.(),
             music: () => this.onMusicToggle?.(),
             hover: h => this._timelineHover(h),
             activity: () => this._activity(),
@@ -980,6 +986,17 @@ class OrreryScene {
         this._timeline.actor.connect('enter-event', () => {
             this._setHover(null);
             return Clutter.EVENT_PROPAGATE;
+        });
+
+        // Chips to show and hide things and missions, from the timeline.
+        this._panel = new LayersPanel(this._hud, {
+            settings: this._settings, missions: MISSIONS,
+            onPrefs: () => {
+                this._togglePanel(false);
+                this.onOpenPrefs?.();
+            },
+            onClose: () => this._togglePanel(false),
+            activity: () => this._activity(),
         });
 
         // Back out of a close-up or a zoom, from the top of the screen.
@@ -1053,6 +1070,29 @@ class OrreryScene {
         this._updateHud();
     }
 
+    // Open or close the chip panel, beside the timeline's right end, on
+    // the side of it with room.
+    _togglePanel(open = !this._panel.isOpen) {
+        if (open) {
+            const {left, right, top, bottom} = this._area;
+            const m = this._margin, tl = this._timeline.actor;
+            const w = Math.min(460, right - left - 2 * m);
+            const x = Math.max(left + m, Math.min(right - m - w, tl.x + tl.width - w));
+            if (this._timelineTop) {
+                const y = tl.y + tl.height + 10;
+                this._panel.place(x, y, w, bottom - m - y);
+            } else {
+                this._panel.place(x, h => tl.y - 10 - h, w, tl.y - 10 - (top + m));
+            }
+            this._hud.set_child_above_sibling(this._panel.actor, null);
+            this._panel.open();
+            this._timeline.show();
+        } else {
+            this._panel.close();
+        }
+        this._syncTimelineState();
+    }
+
     _timelineRange() {
         const t0 = this._startJd(), now = A.jdNow(), t1 = this._endJd();
         const y0 = A.yearOfJd(t0), y1 = A.yearOfJd(t1);
@@ -1083,6 +1123,7 @@ class OrreryScene {
             live: this._live() && !this._browsing,
             spinning: this._settings.get_boolean('spin-planets'),
             music: this.musicState,
+            layers: this._panel?.isOpen,
         });
     }
 
@@ -1326,7 +1367,7 @@ class OrreryScene {
         }
         this._advance(dt);
         this._updateAll(dt);
-        if (this._timelineMode === 'auto' && this._timeline.shown && !this.interacting && !this._timeline.actor.hover)
+        if (this._timelineMode === 'auto' && this._timeline.shown && !this.interacting && !this._timeline.actor.hover && !this._panel.isOpen)
             this._timeline.hide();
     }
 
@@ -2159,6 +2200,8 @@ class OrreryScene {
                 this._focusOn(hit.id);
             } else if (hit) {
                 this._select(hit, {toggle: true});
+            } else if (this._panel.isOpen) {
+                this._togglePanel(false);
             } else {
                 this._deselect();
             }
@@ -2448,12 +2491,17 @@ export default class OrreryExtension extends Extension {
                 this._syncMusic();
             else if (key === 'show-in-overview')
                 this._syncMirror();
+            else if (key === 'sunlight-auto')
+                this._syncSunlightAuto(true);
             else
                 this._scene.onSettingChanged(key);
             if (key === 'spin-planets')
                 this._schedule();
         }, this);
-        this._power = new PowerMonitor(() => this._schedule());
+        this._power = new PowerMonitor(() => {
+            this._schedule();
+            this._syncSunlightAuto();
+        });
 
         // The overview and workspace switches show clones of the scene
         // instead of the plain wallpaper.
@@ -2468,6 +2516,7 @@ export default class OrreryExtension extends Extension {
             },
         });
         this._scene.onMusicToggle = () => this._settings.set_boolean('music-muted', !this._settings.get_boolean('music-muted'));
+        this._scene.onOpenPrefs = () => this.openPreferences();
         this._syncMusic();
 
         this._relayout();
@@ -2536,6 +2585,22 @@ export default class OrreryExtension extends Extension {
             this._relayout();
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    // The sunlight view follows the charger, if asked: switched when it is
+    // plugged in or out (so a click on ☀ in between still holds).
+    _syncSunlightAuto(force = false) {
+        const s = this._settings;
+        const mode = s?.get_string('sunlight-auto');
+        if (!mode || mode === 'manual' || !this._power?.known)
+            return;
+        const charging = !this._power.onBattery;
+        if (!force && charging === this._wasCharging)
+            return;
+        this._wasCharging = charging;
+        const on = mode === 'charging' ? charging : !charging;
+        if (s.get_boolean('sunlight-view') !== on)
+            s.set_boolean('sunlight-view', on);
     }
 
     _syncMirror() {

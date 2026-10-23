@@ -156,6 +156,11 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 'The solar system in the Activities overview, behind the app grid and while switching workspaces, instead of the plain wallpaper'),
             this._switch('Sunlight view', 'sunlight-view',
                 'Color the plane of the planets by how much sunlight falls there, from 9,000 W/m² at Mercury to 1.5 at Neptune'),
+            this._combo('Sunlight view by itself', 'sunlight-auto', [
+                ['manual', 'Never: only when I turn it on'],
+                ['charging', 'On while the charger is connected'],
+                ['battery', 'On while on battery'],
+            ], 'Switches when the charger is plugged in or out; the ☀ button still works in between'),
         ]));
         page.add(this._group('Spacecraft', [
             this._switch('Spacecraft', 'show-missions'),
@@ -211,6 +216,21 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 description: 'Telescopes and Sun-watchers parked at the Lagrange points L1 and L2.',
             }),
         };
+        // Everything at once.
+        const allRow = new Adw.ActionRow({title: 'All missions', subtitle: 'Turn every spacecraft and telescope on or off'});
+        for (const [text, on] of [['All on', true], ['All off', false]]) {
+            const button = new Gtk.Button({label: text, valign: Gtk.Align.CENTER});
+            button.connect('clicked', () => {
+                this._settings.set_strv('disabled-missions', on ? [] : MISSIONS.map(m => m.id));
+                if (on)
+                    this._settings.set_boolean('show-missions', true);
+            });
+            allRow.add_suffix(button);
+        }
+        page.add(this._group('', [
+            this._switch('Show missions', 'show-missions', 'Hide them all without losing the picks below'),
+            allRow,
+        ]));
         for (const m of MISSIONS) {
             const stops = m.events.filter(ev => (ev.kind === 'flyby' || ev.kind === 'arrive') && ev.at).map(ev => placeName(ev.at, true));
             const route = stops.filter((n, i) => n !== stops[i - 1]).join(', ');

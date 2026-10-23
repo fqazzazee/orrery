@@ -105,6 +105,11 @@
       <default>true</default>
       <summary>Show the solar system in the overview and while switching workspaces, instead of the plain wallpaper</summary>
     </key>
+    <key name="sunlight-auto" type="s">
+      <choices><choice value="manual"/><choice value="charging"/><choice value="battery"/></choices>
+      <default>'manual'</default>
+      <summary>Turn the sunlight view on by itself: never, while the charger is connected, or while on battery</summary>
+    </key>
     <key name="sunlight-view" type="b">
       <default>false</default>
       <summary>Color the plane of the planets by how much sunlight falls there</summary>
