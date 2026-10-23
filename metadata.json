@@ -1,0 +1,8 @@
+{
+  "uuid": "orrery@fqazzazee.github.io",
+  "name": "Orrery",
+  "description": "A live, OLED-black solar system as your wallpaper: planets in their real positions, spinning at their relative speeds, with the spacecraft of the space age replaying their gravity-assist journeys and fact cards about distances, speeds and the worlds themselves.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.orrery",
+  "version-name": "1.0"
+}

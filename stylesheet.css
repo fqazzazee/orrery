@@ -1,0 +1,103 @@
+/* Orrery: everything sits on pure black; text and lines stay dim to spare OLED pixels. */
+
+.orrery {
+    background-color: #000000;
+}
+
+.orrery-planet-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8pt;
+    font-weight: 600;
+    color: rgba(215, 222, 240, 0.5);
+}
+
+.orrery-craft-label,
+.orrery-edge {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8pt;
+    font-weight: 600;
+}
+
+.orrery-date {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 28pt;
+    font-weight: 300;
+    color: rgba(225, 230, 245, 0.78);
+}
+
+.orrery-datebox {
+    spacing: 2px;
+}
+
+.orrery-caption {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9.5pt;
+    color: rgba(200, 206, 225, 0.48);
+}
+
+.orrery-card {
+    background-color: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 12px 15px 13px 15px;
+    spacing: 5px;
+}
+
+.orrery-card-title {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 13pt;
+    font-weight: 700;
+}
+
+.orrery-card-subtitle {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    color: rgba(200, 206, 225, 0.55);
+    padding-bottom: 2px;
+}
+
+.orrery-card-line {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 10pt;
+    color: rgba(225, 230, 240, 0.82);
+}
+
+.orrery-leader {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.orrery-ring {
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+}
+
+.orrery-pulse {
+    border: 1.5px solid #ffffff;
+    border-radius: 999px;
+}
+
+.orrery-missions {
+    spacing: 3px;
+}
+
+.orrery-mission-row {
+    spacing: 7px;
+}
+
+.orrery-mission-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.orrery-mission-name {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+}
+
+.orrery-mission-status {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    color: rgba(205, 210, 228, 0.55);
+}

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.orrery" path="/org/gnome/shell/extensions/orrery/">
+
+    <!-- Time -->
+    <key name="mode" type="s">
+      <choices><choice value="replay"/><choice value="live"/></choices>
+      <default>'replay'</default>
+      <summary>Replay the space age, or show the solar system as it is right now</summary>
+    </key>
+    <key name="replay-start-year" type="i">
+      <range min="1970" max="2025"/><default>1972</default>
+    </key>
+    <key name="days-per-second" type="d">
+      <range min="0.5" max="400"/><default>12</default>
+      <summary>Replay speed: simulated days per real second</summary>
+    </key>
+    <key name="replay-jd" type="d">
+      <default>0</default>
+      <summary>Where the replay was when the extension last stopped (Julian date, internal)</summary>
+    </key>
+    <key name="seconds-per-earth-day" type="d">
+      <range min="2" max="600"/><default>12</default>
+      <summary>Spin speed: real seconds for one turn of the Earth; other planets spin in proportion</summary>
+    </key>
+
+    <!-- View -->
+    <key name="distance-scale" type="s">
+      <choices><choice value="sqrt"/><choice value="log"/><choice value="linear"/></choices>
+      <default>'sqrt'</default>
+    </key>
+    <key name="tilt" type="d">
+      <range min="0" max="80"/><default>58</default>
+      <summary>Camera tilt from straight above the Sun, degrees</summary>
+    </key>
+    <key name="azimuth" type="d">
+      <range min="0" max="359"/><default>0</default>
+      <summary>Camera rotation around the Sun, degrees</summary>
+    </key>
+    <key name="zoom" type="d">
+      <range min="40" max="250"/><default>100</default>
+    </key>
+    <key name="planet-scale" type="d">
+      <range min="40" max="300"/><default>100</default>
+    </key>
+    <key name="brightness" type="d">
+      <range min="20" max="100"/><default>90</default>
+    </key>
+
+    <!-- Content -->
+    <key name="show-orbits" type="b"><default>true</default></key>
+    <key name="show-labels" type="b"><default>true</default></key>
+    <key name="show-facts" type="b"><default>true</default></key>
+    <key name="show-missions" type="b"><default>true</default></key>
+    <key name="show-trails" type="b"><default>true</default></key>
+    <key name="show-stars" type="b"><default>true</default></key>
+    <key name="show-belts" type="b"><default>true</default></key>
+    <key name="show-pluto" type="b"><default>true</default></key>
+    <key name="show-hud" type="b"><default>true</default></key>
+    <key name="fact-interval" type="d">
+      <range min="5" max="120"/><default>14</default>
+      <summary>Seconds each fact card stays up</summary>
+    </key>
+    <key name="trail-years" type="d">
+      <range min="0.5" max="60"/><default>8</default>
+      <summary>How many years of spacecraft path to keep on screen</summary>
+    </key>
+    <key name="disabled-missions" type="as"><default>[]</default></key>
+
+    <!-- Power and OLED care -->
+    <key name="fps" type="i">
+      <range min="10" max="60"/><default>30</default>
+    </key>
+    <key name="pause-when-covered" type="b">
+      <default>true</default>
+      <summary>Stop animating while a maximized or fullscreen window, the overview or the lock screen hides the desktop</summary>
+    </key>
+    <key name="pixel-shift" type="b">
+      <default>true</default>
+      <summary>Drift the whole scene a few pixels over time to spread OLED wear</summary>
+    </key>
+  </schema>
+</schemalist>

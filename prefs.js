@@ -1,0 +1,165 @@
+import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
+import Gtk from 'gi://Gtk';
+
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+
+import {MISSIONS} from './lib/missions.js';
+import {BODY} from './lib/bodies.js';
+
+export default class OrreryPreferences extends ExtensionPreferences {
+    fillPreferencesWindow(window) {
+        this._settings = this.getSettings();
+        window.set_default_size(640, 760);
+        window.add(this._timePage());
+        window.add(this._viewPage());
+        window.add(this._contentPage());
+        window.add(this._missionsPage());
+    }
+
+    // ---- Row helpers ----
+
+    _switch(title, key, subtitle = '') {
+        const row = new Adw.SwitchRow({title, subtitle});
+        this._settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+        return row;
+    }
+
+    _spin(title, key, min, max, step, subtitle = '', digits = 0) {
+        const row = Adw.SpinRow.new_with_range(min, max, step);
+        row.set({title, subtitle, digits});
+        this._settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
+        return row;
+    }
+
+    _combo(title, key, choices, subtitle = '') {
+        const row = new Adw.ComboRow({
+            title, subtitle,
+            model: Gtk.StringList.new(choices.map(([, label]) => label)),
+        });
+        const sync = () => {
+            const i = choices.findIndex(([value]) => value === this._settings.get_string(key));
+            row.selected = Math.max(0, i);
+        };
+        sync();
+        this._settings.connect(`changed::${key}`, sync);
+        row.connect('notify::selected', () => {
+            const value = choices[row.selected]?.[0];
+            if (value && value !== this._settings.get_string(key))
+                this._settings.set_string(key, value);
+        });
+        return row;
+    }
+
+    _group(title, rows, description = '') {
+        const group = new Adw.PreferencesGroup({title, description});
+        for (const row of rows)
+            group.add(row);
+        return group;
+    }
+
+    // ---- Pages ----
+
+    _timePage() {
+        const page = new Adw.PreferencesPage({title: 'Time', icon_name: 'preferences-system-time-symbolic'});
+
+        const restart = new Adw.ActionRow({title: 'Restart the replay', subtitle: 'Jump back to the start year'});
+        const button = new Gtk.Button({label: 'Restart', valign: Gtk.Align.CENTER});
+        button.connect('clicked', () => this._settings.set_double('replay-jd', 0));
+        restart.add_suffix(button);
+
+        page.add(this._group('Clock', [
+            this._combo('Mode', 'mode', [
+                ['replay', 'Replay history'],
+                ['live', 'Live'],
+            ], 'Replay runs the space age forward from the start year and loops; Live shows the solar system right now'),
+            this._spin('Replay starts in', 'replay-start-year', 1970, 2025, 1),
+            this._spin('Replay speed', 'days-per-second', 0.5, 400, 0.5,
+                'Simulated days per second. 12 makes a year pass in about 30 seconds', 1),
+            restart,
+        ]));
+        page.add(this._group('Spin', [
+            this._spin('One Earth day lasts', 'seconds-per-earth-day', 2, 600, 1,
+                'Seconds per turn of the Earth. Jupiter turns 2.4 times as fast; Venus takes 243 times as long, backwards'),
+        ], 'Planets spin at their true speeds relative to each other, on their own slower clock so the fast ones do not blur.'));
+        page.add(this._group('Power and OLED care', [
+            this._spin('Frames per second', 'fps', 10, 60, 5),
+            this._switch('Pause when hidden', 'pause-when-covered',
+                'Stop animating behind maximized or fullscreen windows, the overview and the lock screen'),
+            this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
+        ]));
+        return page;
+    }
+
+    _viewPage() {
+        const page = new Adw.PreferencesPage({title: 'View', icon_name: 'video-display-symbolic'});
+        page.add(this._group('Camera', [
+            this._combo('Distance scale', 'distance-scale', [
+                ['sqrt', 'Square root (balanced)'],
+                ['log', 'Logarithmic (roomy inner planets)'],
+                ['linear', 'True to scale (inner planets hug the Sun)'],
+            ], 'Real distances span 0.4 to 30 AU, so they are compressed to fit one screen'),
+            this._spin('Tilt', 'tilt', 0, 80, 1, '0° looks straight down on the Sun'),
+            this._spin('Rotation', 'azimuth', 0, 359, 5, 'Turns the whole system around the Sun'),
+            this._spin('Zoom', 'zoom', 40, 250, 5, 'Percent; 100 fits Neptune’s orbit on screen'),
+        ]));
+        page.add(this._group('Look', [
+            this._spin('Planet size', 'planet-scale', 40, 300, 5, 'Percent'),
+            this._spin('Brightness', 'brightness', 20, 100, 5, 'Percent; lower spares OLED pixels'),
+        ]));
+        return page;
+    }
+
+    _contentPage() {
+        const page = new Adw.PreferencesPage({title: 'Content', icon_name: 'view-list-symbolic'});
+        page.add(this._group('Scene', [
+            this._switch('Orbits', 'show-orbits'),
+            this._switch('Names', 'show-labels'),
+            this._switch('Stars', 'show-stars'),
+            this._switch('Asteroid and Kuiper belts', 'show-belts'),
+            this._switch('Pluto', 'show-pluto'),
+        ]));
+        page.add(this._group('Text', [
+            this._switch('Fact cards', 'show-facts', 'Distances, speeds and trivia, plus a card at each mission event'),
+            this._spin('Each fact stays up for', 'fact-interval', 5, 120, 1, 'Seconds'),
+            this._switch('Date and mission list', 'show-hud'),
+        ]));
+        page.add(this._group('Spacecraft', [
+            this._switch('Spacecraft', 'show-missions'),
+            this._switch('Trails', 'show-trails'),
+            this._spin('Trail length', 'trail-years', 0.5, 60, 0.5, 'Years of path kept on screen', 1),
+        ]));
+        return page;
+    }
+
+    _missionsPage() {
+        const page = new Adw.PreferencesPage({title: 'Missions', icon_name: 'starred-symbolic'});
+        const group = new Adw.PreferencesGroup({
+            title: 'Missions',
+            description: 'Each path is rebuilt from the real dates of its encounters; between them it follows the orbit that joins those points, so small engine burns are left out.',
+        });
+        for (const m of MISSIONS) {
+            const flybys = m.events.filter(ev => ev.kind === 'flyby' && ev.at).map(ev => BODY[ev.at]?.name);
+            const route = flybys.filter((n, i) => n !== flybys[i - 1]).join(', ');
+            const row = new Adw.SwitchRow({
+                title: m.name,
+                subtitle: `${m.agency} · ${m.events[0].date.slice(0, 4)}${route ? ` · ${route}` : ''}`,
+            });
+            const sync = () => {
+                row.active = !this._settings.get_strv('disabled-missions').includes(m.id);
+            };
+            sync();
+            this._settings.connect('changed::disabled-missions', sync);
+            row.connect('notify::active', () => {
+                const list = this._settings.get_strv('disabled-missions').filter(id => id !== m.id);
+                if (!row.active)
+                    list.push(m.id);
+                if (list.join() !== this._settings.get_strv('disabled-missions').join())
+                    this._settings.set_strv('disabled-missions', list);
+            });
+            group.add(row);
+        }
+        page.add(group);
+        return page;
+    }
+}
