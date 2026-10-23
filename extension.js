@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
@@ -9,7 +10,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as A from './lib/astro.js';
 import {BODY, LAGRANGE, LPOINT, MOON, PLANETS, SMALL, SMALL_BODIES, SMALL_PLANETS, moonsOf, placeName} from './lib/bodies.js';
+import {SAT} from './lib/satellites.js';
 import {FactDeck, details, eventCard, eventDate, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
+import {FarLayer} from './lib/far.js';
+import {PlanetView} from './lib/focus.js';
 import {SceneMirror} from './lib/mirror.js';
 import {MISSIONS, buildTrajectories} from './lib/missions.js';
 import {Music} from './lib/music.js';
@@ -32,6 +36,15 @@ const BROWSE_SECONDS = 120;       // live mode returns to today after this long 
 const FUTURE_DAYS = 2 * 365.25;   // the timeline reaches at least this far past today
 const LAST_JD = A.jd('2049-12-31');  // and never past the end of the planets' ephemeris
 const SPEEDS = [0.5, 1, 2, 4, 8, 12, 20, 30, 60, 120, 240, 400];
+// Zooming out: the stops the buttons step through (0 is the planets, 1 the
+// nearest stars), and how far a wheel notch goes.
+const ZOOM_STOPS = [0, 0.22, 0.6, 1];
+const WHEEL_STEP = 0.06;
+const FAR_FROM = 0.3;                   // past this, time runs in years
+const FAR_END = A.jd('2500-01-01');     // how far the timeline reaches then
+const FAR_SPEEDS = [36.525, 182.625, 365.25, 1826.25, 3652.5, 18262.5, 36525];   // days per second
+const FOCUS_RATES = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16];   // times the close-up's own pace
+const FOCUS_MS = 750;
 const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
 const IDLE_FPS = 10;
 const STILL_FPS = 5;
@@ -58,6 +71,8 @@ const TROJAN_COLOR = '#c9b48a';
 
 // Color of any place on screen.
 function placeColor(id) {
+    if (SAT[id])
+        return SAT[id].color ?? '#f2d6a0';
     if (LPOINT[id])
         return id.startsWith('j') ? TROJAN_COLOR : LAGRANGE_COLOR;
     return (BODY[id] ?? MOON[id] ?? SMALL[id])?.color ?? '#ffffff';
@@ -166,6 +181,11 @@ class OrreryScene {
         this._pin = null;             // the card for the selection
         this._dim = 1;
         this._moonClock = 0;          // advances while the planets spin
+        this._zoomOut = 0;            // 0 the planets ... 1 the nearest stars
+        this._zoomTarget = 0;
+        this._farDps = 3652.5;        // ten years a second when zoomed out
+        this._focus = null;           // PlanetView of a planet up close
+        this._focusMul = 1;
         this.powerSaving = false;
         this.onActivity = null;
         this.musicState = 'hidden';   // for the timeline's music button
@@ -174,23 +194,30 @@ class OrreryScene {
         this.actor = new St.Widget({style_class: 'orrery', reactive: false, clip_to_allocation: true});
         this._content = new Clutter.Actor();
         this.actor.add_child(this._content);
+        // The solar system, the close-up of one planet, and the HUD on top.
+        this._system = new Clutter.Actor();
+        this._content.add_child(this._system);
         this._backdrop = new St.DrawingArea();
         this._backdrop.connect('repaint', area => this._paintBackdrop(area));
-        this._content.add_child(this._backdrop);
+        this._system.add_child(this._backdrop);
+        this._far = new FarLayer(this._system);
         this._sunLayer = new Clutter.Actor();
-        this._content.add_child(this._sunLayer);
-        this._hoverPath = new BoxCanvas(this._content);
-        this._highlight = new BoxCanvas(this._content);
-        this._trojans = new BoxCanvas(this._content);
-        this._trails = new BoxCanvas(this._content);
+        this._system.add_child(this._sunLayer);
+        this._hoverPath = new BoxCanvas(this._system);
+        this._highlight = new BoxCanvas(this._system);
+        this._trojans = new BoxCanvas(this._system);
+        this._trails = new BoxCanvas(this._system);
         this._smallLayer = new Clutter.Actor();
         this._world = new Clutter.Actor();
         this._markerLayer = new Clutter.Actor();
         this._craftLayer = new Clutter.Actor();
         this._labels = new Clutter.Actor();
+        for (const layer of [this._smallLayer, this._world, this._markerLayer, this._craftLayer, this._labels])
+            this._system.add_child(layer);
+        this._focusLayer = new Clutter.Actor();
+        this._content.add_child(this._focusLayer);
         this._hud = new Clutter.Actor();
-        for (const layer of [this._smallLayer, this._world, this._markerLayer, this._craftLayer, this._labels, this._hud])
-            this._content.add_child(layer);
+        this._content.add_child(this._hud);
 
         this._buildHud();
         this._buildTrajectories();
@@ -223,6 +250,8 @@ class OrreryScene {
 
     // Far enough ahead to take in every planned mission event.
     _endJd() {
+        if (this._isFar)
+            return FAR_END;
         const last = this._events?.length ? this._events.at(-1).t + 120 : 0;
         return Math.min(LAST_JD, Math.max(A.jdNow() + FUTURE_DAYS, last));
     }
@@ -251,7 +280,8 @@ class OrreryScene {
             this._jd = now;
             return;
         }
-        if (this._live() && (this._browseClock += dt) > BROWSE_SECONDS) {
+        // (Not while zoomed in or out: looking around there is the point.)
+        if (this._live() && !this._focus && !this._isFar && (this._browseClock += dt) > BROWSE_SECONDS) {
             this._goNow();
             return;
         }
@@ -259,9 +289,9 @@ class OrreryScene {
             return;
         // Play up to today, or to the end of the timeline if someone moved
         // past today on purpose (or the replay goes on into the future).
-        const end = this._jd > now + 1 || this._intoFuture() ? this._endJd() : now;
+        const end = this._jd > now + 1 || this._intoFuture() || this._isFar || this._focus ? this._endJd() : now;
         if (this._jd < end) {
-            this._jd = Math.min(end, this._jd + dt * s.get_double('days-per-second'));
+            this._jd = Math.min(end, this._jd + dt * this._dps());
             if (this._live() && this._jd >= now)
                 this._browsing = false;
             return;
@@ -295,7 +325,8 @@ class OrreryScene {
     _timeRuns() {
         if (this._live() && !this._browsing)
             return false;
-        return this._playing && !this._timeline.dragging && this._jd < (this._jd > A.jdNow() + 1 || this._intoFuture() ? this._endJd() : A.jdNow());
+        return this._playing && !this._timeline.dragging &&
+            this._jd < (this._jd > A.jdNow() + 1 || this._intoFuture() || this._isFar || this._focus ? this._endJd() : A.jdNow());
     }
 
     _spinning() {
@@ -304,8 +335,9 @@ class OrreryScene {
 
     // Nothing moves: the extension can drop to a few frames per second.
     get still() {
-        return !this._timeRuns() && !this._spinning() && !this._restarting &&
-            this._realTime - this._lastActivity > 3 && !this._eventCards.length;
+        // (Up close everything turns with the clock, so stopping it is enough.)
+        return !this._timeRuns() && (!this._spinning() || !!this._focus) && !this._restarting &&
+            Math.abs(this._zoomTarget - this._zoomOut) < 1e-4 && this._realTime - this._lastActivity > 3 && !this._eventCards.length;
     }
 
     get interacting() {
@@ -314,7 +346,7 @@ class OrreryScene {
 
     // Jump the clock; `done` is false while the playhead is being dragged.
     _seek(t, done = true, ev = null) {
-        const lead = Math.min(60, 3 * this._settings.get_double('days-per-second'));
+        const lead = Math.min(60, 3 * this._dps());
         if (ev) {
             // Land a little before the event so it plays out, and follow
             // the mission it belongs to.
@@ -363,6 +395,23 @@ class OrreryScene {
     }
 
     _changeSpeed(dir) {
+        // Up close and far away keep their own speeds.
+        const step = (list, v) => {
+            const i = list.findIndex(x => x >= v - 1e-9);
+            return list[Math.max(0, Math.min(list.length - 1, (i < 0 ? list.length - 1 : i) + dir))];
+        };
+        if (this._focus) {
+            this._focusMul = step(FOCUS_RATES, this._focusMul);
+            this._syncTimelineState();
+            this._updateHud();
+            return;
+        }
+        if (this._isFar) {
+            this._farDps = step(FAR_SPEEDS, this._farDps);
+            this._syncTimelineState();
+            this._updateHud();
+            return;
+        }
         const dps = this._settings.get_double('days-per-second');
         let i = SPEEDS.findIndex(v => v >= dps - 1e-6);
         if (i < 0)
@@ -434,6 +483,8 @@ class OrreryScene {
         this.actor.set_size(W, H);
         this.actor.reactive = s.get_boolean('interactive');
         this._backdrop.set_size(W, H);
+        this._system.set_size(W, H);
+        this._focusLayer.set_size(W, H);
         this._content.opacity = this._opacity();
 
         // Work area relative to the monitor: keep clear of the top bar and docks.
@@ -443,10 +494,11 @@ class OrreryScene {
         const zoom = s.get_double('zoom') / 100;
         const availH = bottom - top;
         const fitPx = Math.min(W * 0.46, availH * 0.46 / Math.max(0.2, Math.cos(tilt * Math.PI / 180))) * zoom;
-        this._proj = new A.Projection({
+        this._projParams = {
             cx: W / 2, cy: top + availH / 2, fitPx,
             mode: s.get_string('distance-scale'), tilt, azimuth: s.get_double('azimuth'),
-        });
+        };
+        this._proj = new A.Projection({...this._projParams, zoomOut: this._zoomOut});
         this._unit = W / 220 * s.get_double('planet-scale') / 100;
         this._orbitCache = new Map();
         this._trojansDrawn = null;
@@ -466,6 +518,13 @@ class OrreryScene {
             this._select(selected, {expand: expanded});
         this._factCard?.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
         this._stackEventCards();
+        // A close-up is sized to the screen too.
+        if (this._focus) {
+            const id = this._focus.id;
+            this._focus.destroy();
+            this._focus = this._makeFocus(id);
+        }
+        this._applyCamera();
         this._updateAll(0);
         this._showHighlight();
     }
@@ -497,6 +556,7 @@ class OrreryScene {
         const sunSize = Math.ceil(sunR * 7);
         const sunSprite = new Sprite(this._world, sunSize, cr => R.drawSun(cr, sunSize, sunR));
         sunSprite.repaint();
+        sunSprite.area.set_pivot_point(0.5, 0.5);
         this._sun = {id: 'sun', R: sunR, size: sunSize, actor: sunSprite.area, pos: [0, 0, 0], moons: [], orbits: null};
         this._bodies.push(this._sun);
 
@@ -510,7 +570,8 @@ class OrreryScene {
 
             // Layers, so a spin only redraws the surface: rings behind,
             // surface, day/night shading, rings in front.
-            b.actor = new Clutter.Actor();
+            // Sized, so it can shrink about its center when zoomed out.
+            b.actor = new Clutter.Actor({width: size, height: size, pivot_point: new Graphene.Point({x: 0.5, y: 0.5})});
             this._world.add_child(b.actor);
             // Faint rings for the moons' orbits, shown when the planet is
             // picked; first, so they sit behind it.
@@ -645,6 +706,15 @@ class OrreryScene {
         }
     }
 
+    _projectTrails() {
+        for (const tr of this._trajectories) {
+            tr.projected = tr.cache.map(({t, p}) => {
+                const [x, y] = this._proj.project(p);
+                return [x, y, t];
+            });
+        }
+    }
+
     _buildCraft() {
         for (const tr of this._trajectories) {
             tr.marker?.destroy();
@@ -654,11 +724,8 @@ class OrreryScene {
         }
         const show = this._settings.get_boolean('show-missions');
         const size = Math.ceil(this._unit * 2.2) | 1;
+        this._projectTrails();
         for (const tr of this._trajectories) {
-            tr.projected = tr.cache.map(({t, p}) => {
-                const [x, y] = this._proj.project(p);
-                return [x, y, t];
-            });
             if (!show)
                 continue;
             tr.marker = new Sprite(this._craftLayer, size, cr => R.drawCraft(cr, size, tr.rgb));
@@ -670,6 +737,185 @@ class OrreryScene {
             this._labels.add_child(tr.label);
             this._labels.add_child(tr.edge);
         }
+    }
+
+    // ---- Camera ----
+
+    // Zoomed out: everything is projected again, the planets shrink to a
+    // knot and the far layer fades in.
+    _applyCamera() {
+        if (!this._projParams)
+            return;
+        const u = this._zoomOut;
+        // The camera rises as it pulls back, so things heading up out of
+        // the plane of the planets (Voyager 1) are not seen end-on.
+        const tilt = this._projParams.tilt;
+        this._proj = new A.Projection({...this._projParams, zoomOut: u, tilt: tilt + (Math.min(tilt, 25) - tilt) * smooth(u / 0.6)});
+        this._orbitCache = new Map();
+        this._trojansDrawn = null;
+        this._projectTrails();
+        this._backdrop.queue_repaint();
+        if (this._settings.get_boolean('sunlight-view'))
+            this._layoutSunlight();
+        this._bodyScale = 1 - 0.7 * smooth(u / 0.35);
+        for (const b of this._bodies) {
+            b.actor.set_scale(this._bodyScale, this._bodyScale);
+            for (const m of b.moons)
+                m.area.visible = u < 0.04;
+        }
+        this._markerLayer.visible = u < 0.12;
+        this._far.layout({proj: this._proj, W: this._W, H: this._H, trajectories: this._trajectories,
+            area: {...this._area, top: this._slots?.sceneTop ?? this._area.top, bottom: this._slots?.sceneBottom ?? this._area.bottom}});
+        const far = u > FAR_FROM;
+        if (far !== this._isFar) {
+            this._isFar = far;
+            // Coming back in from a far future, return to today.
+            if (!far && this._jd > this._endJd())
+                this._seek(Math.min(this._jd, A.jdNow()));
+            if (far && this._live())
+                this._browsing = true;
+            this._timelineRange();
+        }
+        this._syncTimelineState();
+        this._updateTrails();
+        this._showHighlight();
+        this._drawHover();
+    }
+
+    // Zoom one step: out toward the stars or back, or in to a planet
+    // (the one under the pointer, the one picked, or Earth).
+    _zoom(dir, near = null) {
+        if (dir < 0) {
+            if (this._focus) {
+                this._leaveFocus();
+                return;
+            }
+            this._zoomTarget = ZOOM_STOPS.find(z => z > this._zoomTarget + 0.01) ?? 1;
+        } else if (this._zoomTarget > 0.01) {
+            this._zoomTarget = [...ZOOM_STOPS].reverse().find(z => z < this._zoomTarget - 0.01) ?? 0;
+        } else if (!this._focus) {
+            const pick = s => s && !s.tr && BODY[s.id] && s.id !== 'sun' ? s.id : null;
+            this._focusOn(pick(near) ?? pick(this._selected) ?? 'earth');
+        }
+        this._activity();
+        this._syncTimelineState();
+    }
+
+    // The mouse wheel zooms smoothly; past the planets it flies to the one
+    // under the pointer.
+    _wheel(steps, x, y) {
+        if (steps < 0 && this._focus) {
+            this._leaveFocus();
+            return;
+        }
+        if (steps > 0 && this._zoomTarget <= 0.001 && !this._focus) {
+            const hit = this._hitTest(x, y);
+            if (hit && !hit.tr && BODY[hit.id] && hit.id !== 'sun')
+                this._focusOn(hit.id);
+            return;
+        }
+        this._zoomTarget = Math.max(0, Math.min(1, this._zoomTarget - steps * WHEEL_STEP));
+        this._syncTimelineState();
+    }
+
+    _makeFocus(id) {
+        const view = new PlanetView(this._focusLayer, id, {
+            view: v => this._proj.view(v), area: this._area, W: this._W, H: this._H,
+            trajectories: this._trajectories, showLabels: this._settings.get_boolean('show-labels'),
+        });
+        view.update(this._jd);
+        return view;
+    }
+
+    // Fly in: the system swells around the planet and fades as the
+    // close-up grows out of it.
+    _focusOn(id) {
+        if (this._focus?.id === id)
+            return;
+        if (this._focus)
+            this._leaveFocus(false);
+        if (this._zoomOut) {
+            this._zoomOut = this._zoomTarget = 0;
+            this._applyCamera();
+        }
+        const b = this._bodyById(id);
+        const [px, py] = [b?.x ?? this._W / 2, b?.y ?? this._H / 2];
+        this._focus = this._makeFocus(id);
+        this._focusMul = 1;
+        if (this._live())
+            this._browsing = true;
+        this._playing = true;
+        const [cx, cy] = [this._focus.cx, this._focus.cy];
+        const mode = Clutter.AnimationMode.EASE_IN_OUT_CUBIC;
+        for (const a of [this._system, this._focusLayer])
+            a.remove_all_transitions();
+        this._system.show();
+        this._system.set_pivot_point(px / this._W, py / this._H);
+        this._system.ease({scale_x: 6, scale_y: 6, opacity: 0, duration: FOCUS_MS, mode,
+            onComplete: () => {
+                if (this._focus)
+                    this._system.hide();
+            }});
+        this._focusLayer.set({pivot_point: new Graphene.Point({x: cx / this._W, y: cy / this._H}),
+            scale_x: 0.12, scale_y: 0.12, translation_x: px - cx, translation_y: py - cy, opacity: 0});
+        this._focusLayer.show();
+        this._focusLayer.ease({scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacity: 255, duration: FOCUS_MS, mode});
+        this._setHover(null);
+        this._showHighlight();
+        this._syncTimelineState();
+        this._updateHud();
+        this._refreshFact();
+    }
+
+    // A new fact card for the new view (unless one is pinned).
+    _refreshFact() {
+        if (!this._pin && this._settings.get_boolean('show-facts'))
+            this._factClock = this._settings.get_double('fact-interval');
+    }
+
+    // Fly back out to the planet's place in the system.
+    _leaveFocus(animate = true) {
+        const leaving = this._focus;
+        if (!leaving)
+            return;
+        this._focus = null;
+        this._focusMul = 1;
+        this._updateAll(0);
+        const b = this._bodyById(leaving.id);
+        const [px, py] = [b?.x ?? this._W / 2, b?.y ?? this._H / 2];
+        const mode = Clutter.AnimationMode.EASE_IN_OUT_CUBIC;
+        for (const a of [this._system, this._focusLayer])
+            a.remove_all_transitions();
+        this._system.show();
+        this._system.set_pivot_point(px / this._W, py / this._H);
+        this._system.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: animate ? FOCUS_MS : 0, mode});
+        this._focusLayer.ease({scale_x: 0.12, scale_y: 0.12, translation_x: px - leaving.cx, translation_y: py - leaving.cy,
+            opacity: 0, duration: animate ? FOCUS_MS : 0, mode,
+            onComplete: () => leaving.destroy()});
+        if (this._live())
+            this._goNow();
+        this._setHover(null);
+        this._syncTimelineState();
+        this._updateHud();
+        this._refreshFact();
+    }
+
+    // Simulated days per real second, for the view on screen.
+    _dps() {
+        if (this._focus)
+            return this._focus.rate * this._focusMul / A.DAY_S;
+        if (this._isFar)
+            return this._farDps;
+        return this._settings.get_double('days-per-second');
+    }
+
+    _speedText() {
+        if (this._focus)
+            return `×${A.formatCount(Math.round(this._focus.rate * this._focusMul))}`;
+        const dps = this._dps();
+        if (dps >= 36.5)
+            return `${+(dps / 365.25).toFixed(dps < 365.25 ? 1 : 0)} y/s`;
+        return dps >= 1 ? `${+dps.toFixed(1)} d/s` : `${dps} d/s`;
     }
 
     // ---- HUD ----
@@ -717,6 +963,7 @@ class OrreryScene {
             now: () => this._goNow(),
             sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
             spin: () => this._settings.set_boolean('spin-planets', !this._settings.get_boolean('spin-planets')),
+            zoom: dir => this._zoom(dir),
             music: () => this.onMusicToggle?.(),
             hover: h => this._timelineHover(h),
             activity: () => this._activity(),
@@ -726,6 +973,18 @@ class OrreryScene {
             this._setHover(null);
             return Clutter.EVENT_PROPAGATE;
         });
+
+        // Back out of a close-up or a zoom, from the top of the screen.
+        this._backButton = new St.Button({style_class: 'orrery-pill orrery-back', label: '‹  Back to the solar system',
+            can_focus: false, visible: false});
+        this._backButton.connect('clicked', () => {
+            if (this._focus)
+                this._leaveFocus();
+            else
+                this._zoomTarget = 0;
+            this._syncTimelineState();
+        });
+        this._hud.add_child(this._backButton);
 
         // One tooltip, shared by the scene and the timeline.
         this._tooltip = label('orrery-tooltip');
@@ -774,6 +1033,9 @@ class OrreryScene {
             sceneBottom: on && !atTop ? ty - 4 : bottom,
         };
         this._dateBox.set_position(left + m, this._slots.dateTop);
+        const bw = this._backButton.get_preferred_width(-1)[1];
+        this._backButton.set_position(Math.round((left + right - bw) / 2),
+            on && atTop && side === 'center' ? ty + th + gap : top + Math.round(m * 0.6));
         this._timelineRange();
         if (mode === 'always')
             this._timeline.show();
@@ -786,13 +1048,14 @@ class OrreryScene {
     _timelineRange() {
         const t0 = this._startJd(), now = A.jdNow(), t1 = this._endJd();
         const y0 = A.yearOfJd(t0), y1 = A.yearOfJd(t1);
-        const step = y1 - y0 > 40 ? 10 : 5;
+        const step = y1 - y0 > 300 ? 100 : y1 - y0 > 120 ? 25 : y1 - y0 > 40 ? 10 : 5;
         const years = [], labels = [];
         for (let y = y0; y <= y1; y++) {
             const t = A.jd(`${y}-01-01`);
             if (t < t0 || t > t1)
                 continue;
-            years.push([t, y % step === 0]);
+            if (y1 - y0 < 120 || y % step === 0)
+                years.push([t, y % step === 0]);
             if (y % step === 0)
                 labels.push([t, `${y}`]);
         }
@@ -802,10 +1065,12 @@ class OrreryScene {
     }
 
     _syncTimelineState() {
-        const dps = this._settings.get_double('days-per-second');
+        this._backButton?.set({visible: !!this._focus || this._zoomTarget > 0.01,
+            label: this._focus ? '‹  Back to the solar system' : '‹  Back to the planets'});
         this._timeline.setState({
             playing: this._live() && !this._browsing ? true : this._playing,
-            speed: dps >= 1 ? `${+dps.toFixed(1)} d/s` : `${dps} d/s`,
+            speed: this._speedText(),
+            zoom: this._focus ? 'planet' : this._zoomTarget >= 0.999 ? 'max' : this._zoomTarget > 0.01 ? 'far' : 'system',
             sunlight: this._settings.get_boolean('sunlight-view'),
             live: this._live() && !this._browsing,
             spinning: this._settings.get_boolean('spin-planets'),
@@ -816,12 +1081,20 @@ class OrreryScene {
     _updateHud() {
         const s = this._settings;
         const live = this._live();
-        this._dateLabel.text = A.formatDate(this._jd);
+        // Up close, time runs in minutes and hours.
+        const clock = new Date(A.msFromJd(this._jd));
+        this._dateLabel.text = this._focus
+            ? `${A.formatDate(this._jd)}  ${String(clock.getUTCHours()).padStart(2, '0')}:${String(clock.getUTCMinutes()).padStart(2, '0')} UTC`
+            : A.formatDate(this._jd);
         const now = A.jdNow();
         const today = Math.abs(this._jd - now) < 0.5;
         const dps = +s.get_double('days-per-second').toFixed(1);
         let caption;
-        if (live && !this._browsing)
+        if (this._focus)
+            caption = `${BODY[this._focus.id].name} up close · ${this._speedText()} real speed${this._playing ? '' : ' · paused'}`;
+        else if (this._isFar)
+            caption = `From beyond the planets · ${this._speedText()}${this._playing ? '' : ' · paused'}`;
+        else if (live && !this._browsing)
             caption = 'Live · the solar system right now';
         else if (live)
             caption = `Exploring${this._playing ? ` · ${dps} days per second` : ' · paused'} · back to live soon`;
@@ -1030,6 +1303,12 @@ class OrreryScene {
         if (!this._proj)
             return;
         this._realTime += dt;
+        // Ease toward the zoom asked for.
+        const dz = this._zoomTarget - this._zoomOut;
+        if (Math.abs(dz) > 1e-4) {
+            this._zoomOut = Math.abs(dz) < 0.002 ? this._zoomTarget : this._zoomOut + dz * Math.min(1, dt * 5);
+            this._applyCamera();
+        }
         this._advance(dt);
         this._updateAll(dt);
         if (this._timelineMode === 'auto' && this._timeline.shown && !this.interacting && !this._timeline.actor.hover)
@@ -1037,8 +1316,18 @@ class OrreryScene {
     }
 
     _updateAll(dt) {
-        this._updateBodies();
-        this._updateCraft();
+        // Up close, the system behind is hidden once the flight in is over.
+        const system = !this._focus || this._system.visible;
+        if (system) {
+            this._updateBodies();
+            this._updateCraft();
+        }
+        if (this._focus) {
+            this._focus.update(this._jd);
+            const featured = it => sameSubject(this._subject(), it.tr ? {tr: it.tr} : {id: it.id}) ||
+                sameSubject(this._hover, it.tr ? {tr: it.tr} : {id: it.id});
+            this._focus.placeLabels(featured);
+        }
         this._fireEvents();
         this._updateCards(dt);
 
@@ -1057,7 +1346,8 @@ class OrreryScene {
         } else {
             this._timeline.setTime(this._jd);
         }
-        this._declutter();
+        if (system)
+            this._declutter();
         if (this._settings.get_boolean('pixel-shift')) {
             const t = this._realTime;
             const dx = Math.round(4 * Math.sin(t * 2 * Math.PI / 600));
@@ -1083,7 +1373,8 @@ class OrreryScene {
             order.push([depth, b.actor]);
             if (b.label) {
                 const w = b.label.width || b.label.get_preferred_width(-1)[1];
-                b.label.set_translation(Math.round(x - w / 2), Math.round(y + b.R + 3 + (b.id === 'saturn' ? b.R * 0.5 : 0)), 0);
+                const r = b.R * (this._bodyScale ?? 1);
+                b.label.set_translation(Math.round(x - w / 2), Math.round(y + r + 3 + (b.id === 'saturn' ? r * 0.5 : 0)), 0);
             }
             if (b.id === 'sun')
                 continue;
@@ -1164,6 +1455,8 @@ class OrreryScene {
         const s = x.data, jd = this._jd;
         if (s.show === 'always')
             return this._settings.get_boolean('show-small-bodies');
+        if (s.show === 'far')
+            return this._settings.get_boolean('show-small-bodies') && this._zoomOut > 0.05;
         if (Array.isArray(s.show))
             return this._settings.get_boolean('show-small-bodies') && jd > A.jd(s.show[0]) && jd < A.jd(s.show[1]);
         return this._settings.get_boolean('show-missions') &&
@@ -1237,7 +1530,7 @@ class OrreryScene {
             }
             x.sprite.moveTo(x.x, x.y);
             if (x.label) {
-                x.label.visible = true;   // _declutter() decides
+                x.label.visible = this._markerLayer.visible;   // then _declutter() decides
                 const w = x.label.width || x.label.get_preferred_width(-1)[1];
                 x.label.set_translation(Math.round(x.x - w / 2), Math.round(x.y + 5), 0);
             }
@@ -1376,7 +1669,7 @@ class OrreryScene {
                 items.push([prio, actor]);
         };
         for (const b of this._bodies)
-            add(b.label, 0);
+            add(b.label, this._zoomOut > 0.1 && b.id !== 'sun' ? 2 : 0);   // zoomed out, inner names give way
         for (const tr of this._trajectories)
             add(tr.label, featured({tr}) ? 1 : 2);
         for (const x of this._smalls)
@@ -1474,7 +1767,7 @@ class OrreryScene {
             return;
         while (this._eventIndex < this._events.length && this._events[this._eventIndex].t <= this._jd) {
             const ev = this._events[this._eventIndex++];
-            if (!this._settings.get_boolean('show-missions') || !this._settings.get_boolean('show-facts'))
+            if (!this._settings.get_boolean('show-missions') || !this._settings.get_boolean('show-facts') || this._isFar)
                 continue;
             // Skip events left far behind (e.g. after the replay speed was
             // raised) and the ones swept past while dragging the timeline.
@@ -1539,11 +1832,11 @@ class OrreryScene {
                 this._stackEventCards();
                 continue;
             }
-            const target = c.tr?.now;
+            const target = c.tr ? this._target({tr: c.tr}) : null;
             c.card.leader.visible = !!target;
             c.card.ring.visible = !!target;
             if (target)
-                c.card.aim(target[0], target[1], 6);
+                c.card.aim(target[0], target[1], target[2]);
         }
 
         // A pinned card stays until closed and follows its subject.
@@ -1580,6 +1873,8 @@ class OrreryScene {
     _target(subject) {
         if (!subject)
             return null;
+        if (this._focus)
+            return this._focus.targetOf(subject);
         if (subject.tr) {
             const n = subject.tr.now;
             return n && subject.tr.marker?.area.visible ? [n[0], n[1], 6] : null;
@@ -1619,15 +1914,17 @@ class OrreryScene {
                 ...this._smalls.filter(x => x.shown).map(x => x.id),
                 ...this._lpoints.map(x => x.id),
             ];
-            const pool = this._factCount % 4 === 1 && extras.length ? 'extras' : 'bodies';
+            // Up close: the planet and what is around it.
+            const pool = this._focus ? `focus:${this._focus.id}` : this._factCount % 4 === 1 && extras.length ? 'extras' : 'bodies';
             this._factOrder ??= {};
             if (!this._factOrder[pool]?.length) {
-                const ids = pool === 'extras' ? extras : this._bodies.map(b => b.id);
+                const ids = this._focus ? [this._focus.id, ...this._focus.present]
+                    : pool === 'extras' ? extras : this._bodies.map(b => b.id);
                 this._factOrder[pool] = ids.map(id => [Math.random(), id]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
             }
             let id = this._factOrder[pool].pop();
-            if (!this._bodyById(id))
-                id = 'sun';
+            if (!this._bodyById(id) && !this._focus?.has({id}))
+                id = this._focus?.id ?? 'sun';
             subject = {id};
             color = placeColor(id);
             content = this._facts.card(id, jd);
@@ -1711,6 +2008,7 @@ class OrreryScene {
             onClose: () => this._deselect(),
             onEvent: ev => this._seek(ev.t, true, ev),
             onLink: link => this._follow(link),
+            onZoom: () => this._focusOn(subject.id),
         });
         this._pin.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
         this._pin.setMaxHeight(this._slots.cardBottom - this._slots.cardTop);
@@ -1740,7 +2038,7 @@ class OrreryScene {
     // flight, flown part solid and the rest dashed.
     _showHighlight() {
         const subject = this._subject();
-        if (!subject || !this._proj) {
+        if (!subject || !this._proj || this._focus) {
             this._highlight.hide();
             return;
         }
@@ -1837,10 +2135,43 @@ class OrreryScene {
             this._press = null;
             const [, x, y] = this.actor.transform_stage_point(sx, sy);
             const hit = this._hitTest(x, y);
-            if (hit)
+            // A double click on a planet flies in to it.
+            const time = event.get_time();
+            const double = hit && sameSubject(hit, this._lastClick?.hit) && time - this._lastClick.time < 400;
+            this._lastClick = {hit, time};
+            if (double && !hit.tr && BODY[hit.id] && hit.id !== 'sun' && this._focus?.id !== hit.id) {
+                this._select(hit);
+                this._focusOn(hit.id);
+            } else if (hit) {
                 this._select(hit, {toggle: true});
-            else
+            } else {
                 this._deselect();
+            }
+            return Clutter.EVENT_STOP;
+        });
+        // The wheel zooms: out toward the stars, in to a planet.
+        this.actor.connect('scroll-event', (_a, event) => {
+            if (!own(event) || !this._interactive())
+                return Clutter.EVENT_PROPAGATE;
+            const dir = event.get_scroll_direction();
+            let steps = 0;
+            if (dir === Clutter.ScrollDirection.UP)
+                steps = 1;
+            else if (dir === Clutter.ScrollDirection.DOWN)
+                steps = -1;
+            else if (dir === Clutter.ScrollDirection.SMOOTH)
+                steps = -event.get_scroll_delta()[1];
+            // Smooth scrolling comes in small pieces; a jump to or from a
+            // planet waits for a whole notch.
+            this._wheelSum = (this._wheelSum ?? 0) + steps;
+            const [sx, sy] = event.get_coords();
+            const [, x, y] = this.actor.transform_stage_point(sx, sy);
+            const atEdge = !this._focus && this._zoomTarget <= 0.001 && steps > 0 || this._focus && steps < 0;
+            if (atEdge && Math.abs(this._wheelSum) < 1)
+                return Clutter.EVENT_STOP;
+            this._wheel(atEdge ? Math.sign(this._wheelSum) : steps, x, y);
+            this._wheelSum = 0;
+            this._activity();
             return Clutter.EVENT_STOP;
         });
     }
@@ -1869,6 +2200,8 @@ class OrreryScene {
     _hitTest(x, y) {
         if (!this._proj)
             return null;
+        if (this._focus)
+            return this._focus.hitTest(x, y);
         let best = null, bestD = Infinity;
         for (const tr of this._trajectories) {
             if (!tr.now || !tr.marker?.area.visible)
@@ -1897,7 +2230,7 @@ class OrreryScene {
             return best;
         for (const b of this._bodies) {
             const d = Math.hypot(x - b.x, y - b.y);
-            const reach = Math.max(b.R + 5, 11);
+            const reach = Math.max(b.R * (this._bodyScale ?? 1) + 5, 11);
             if (d < reach && d / reach < bestD)
                 [best, bestD] = [{id: b.id}, d / reach];
         }
@@ -1946,6 +2279,8 @@ class OrreryScene {
         const id = subject.id;
         if (id === 'sun')
             return 'The Sun';
+        if (SAT[id])
+            return `${SAT[id].short ?? SAT[id].name} · ${SAT[id].kind}`;
         if (MOON[id])
             return id === 'moon' ? 'The Moon' : `${MOON[id].name} · moon of ${BODY[MOON[id].parent].name}`;
         if (LPOINT[id])
@@ -1957,7 +2292,7 @@ class OrreryScene {
 
     _drawHover() {
         const h = this._hover;
-        if (!h || sameSubject(h, this._subject())) {
+        if (!h || sameSubject(h, this._subject()) || this._focus) {
             this._hoverPath.hide();
             return;
         }

@@ -407,3 +407,50 @@
     border: 1.5px solid rgba(255, 255, 255, 0.9);
     width: 4px;
 }
+
+/* Close-ups and the view from afar */
+
+.orrery-focus-moon {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8pt;
+    font-weight: 600;
+    color: rgba(215, 222, 240, 0.6);
+}
+
+.orrery-focus-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+}
+
+.orrery-far-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7pt;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: rgba(170, 210, 255, 0.5);
+}
+
+.orrery-far-region {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: rgba(215, 205, 190, 0.4);
+}
+
+.orrery-far-star {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8pt;
+    color: rgba(255, 235, 200, 0.7);
+}
+
+.orrery-far-year {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7pt;
+    font-weight: 600;
+}
+
+.orrery-pill.orrery-back {
+    background-color: #000000;
+}

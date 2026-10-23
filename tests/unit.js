@@ -7,6 +7,8 @@ import {BODIES, LAGRANGE, MOONS, SMALL_BODIES} from '../lib/bodies.js';
 import {bodyDetails, details, missionDetails, missionStatus} from '../lib/facts.js';
 import {buildTrajectories} from '../lib/missions.js';
 import {sunlightColor} from '../lib/render.js';
+import {GM} from '../lib/bodies.js';
+import {SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
 
 let failed = 0;
 function check(ok, name) {
@@ -167,6 +169,45 @@ check(near(A.inclinationDeg(A.planetOrbit('mercury', A.J2000)), 7.0, 0.05), 'Mer
     const h = A.norm(A.bodyPosition('halley', A.jd('1986-02-09')));
     check(near(h, 0.586, 0.02), `Halley at perihelion in Feb 1986 (${h.toFixed(3)} AU)`);
     check(near(A.norm(A.bodyPosition('3i', A.jd('2025-10-29') + 0.44)), 1.357, 0.01), '3I/ATLAS at perihelion on 29 Oct 2025');
+}
+
+// Close-ups: planets face the right way, satellites keep time.
+{
+    const lon = A.subsolarLongitudeDeg('earth', A.jdFromMs(Date.parse('2026-03-20T12:00:00Z')), [0, 90], [0, 0, 1]);
+    check(Math.abs(lon) < 3, `the Sun is over Greenwich at noon UTC (${lon.toFixed(1)}°)`);
+    const lon2 = A.subsolarLongitudeDeg('earth', A.jdFromMs(Date.parse('2026-06-21T18:00:00Z')), [0, 90], [0, 0, 1]);
+    check(near(lon2, -90, 3), `and over 90°W at 18:00 UTC (${lon2.toFixed(1)}°)`);
+    const period = id => A.satellitePeriodS(orbitOf(SATELLITES.find(x => x.id === id).orbit, 'earth').a, GM.earth) / 60;
+    check(near(period('iss'), 92.8, 1), `the ISS laps Earth in about 93 minutes (${period('iss').toFixed(1)})`);
+    check(near(period('geo'), 1436, 2), `a geostationary orbit takes a sidereal day (${period('geo').toFixed(0)} min)`);
+    const o = {...orbitOf({alt: 420, i: 51.6}, 'earth')};
+    const r = A.norm(A.satellitePosition(o, [0, 0, 1], GM.earth, A.J2000 + 1.234));
+    check(near(r, 6371 + 420, 1), 'a circular orbit stays at its height');
+    let bad = [];
+    for (const id of Object.keys(SAT)) {
+        const text = JSON.stringify(details(id, A.jd('2026-10-23')));
+        if (/undefined|NaN/.test(text))
+            bad.push(id);
+    }
+    check(!bad.length, `every satellite and landing site has a clean card${bad.length ? `: ${bad.join(', ')}` : ''}`);
+}
+
+// Zooming out keeps the order of distances, and leaves the planets alone at 0.
+{
+    let ok = true;
+    for (const z of [0, 0.3, 0.7, 1]) {
+        const p = new A.Projection({cx: 0, cy: 0, fitPx: 500, zoomOut: z});
+        let last = -1;
+        for (const r of [0.4, 1, 5, 30, 120, 1000, 1e4, 1e5, 3e5]) {
+            ok &&= p.radiusPx(r) > last;
+            last = p.radiusPx(r);
+        }
+    }
+    check(ok, 'zoomed out, farther is always farther out on screen');
+    const p0 = new A.Projection({cx: 0, cy: 0, fitPx: 500, zoomOut: 0});
+    check(near(p0.radiusPx(30.1), 500, 1e-9), 'not zoomed out, Neptune still fits the screen');
+    const p1 = new A.Projection({cx: 0, cy: 0, fitPx: 500, zoomOut: 1});
+    check(near(p1.radiusPx(A.FAR_AU), 500, 1e-6) && p1.radiusPx(30) > 100, 'all the way out, the nearest stars fit and the planets still show');
 }
 
 print(failed ? `\n${failed} failed` : '\nall passed');
