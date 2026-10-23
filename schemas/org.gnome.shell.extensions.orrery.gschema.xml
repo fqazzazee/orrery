@@ -19,6 +19,10 @@
       <default>0</default>
       <summary>Where the replay was when the extension last stopped (Julian date, internal)</summary>
     </key>
+    <key name="replay-into-future" type="b">
+      <default>false</default>
+      <summary>Carry the replay on past today, through the planned missions, before starting over</summary>
+    </key>
     <key name="seconds-per-earth-day" type="d">
       <range min="2" max="600"/><default>12</default>
       <summary>Spin speed: real seconds for one turn of the Earth; other planets spin in proportion</summary>
@@ -56,6 +60,18 @@
     <key name="show-stars" type="b"><default>true</default></key>
     <key name="show-belts" type="b"><default>true</default></key>
     <key name="show-pluto" type="b"><default>true</default></key>
+    <key name="show-moons" type="b">
+      <default>true</default>
+      <summary>Show the major moons around their planets</summary>
+    </key>
+    <key name="show-small-bodies" type="b">
+      <default>true</default>
+      <summary>Show Ceres, Vesta, Halley’s Comet and interstellar visitors</summary>
+    </key>
+    <key name="show-lagrange" type="b">
+      <default>true</default>
+      <summary>Mark the Sun–Earth Lagrange points and Jupiter’s Trojan camps</summary>
+    </key>
     <key name="show-hud" type="b"><default>true</default></key>
     <key name="fact-interval" type="d">
       <range min="5" max="120"/><default>14</default>
@@ -77,6 +93,18 @@
       <default>'auto'</default>
       <summary>Show the timeline: when the pointer moves over the desktop, always, or never</summary>
     </key>
+    <key name="timeline-position" type="s">
+      <choices>
+        <choice value="bottom"/><choice value="bottom-left"/><choice value="bottom-right"/>
+        <choice value="top"/><choice value="top-left"/><choice value="top-right"/>
+      </choices>
+      <default>'bottom'</default>
+      <summary>Where the timeline sits on the screen</summary>
+    </key>
+    <key name="show-in-overview" type="b">
+      <default>true</default>
+      <summary>Show the solar system in the overview and while switching workspaces, instead of the plain wallpaper</summary>
+    </key>
     <key name="sunlight-view" type="b">
       <default>false</default>
       <summary>Color the plane of the planets by how much sunlight falls there</summary>
@@ -84,6 +112,32 @@
     <key name="spin-planets" type="b">
       <default>true</default>
       <summary>Turn the planets on their axes</summary>
+    </key>
+
+    <!-- Music -->
+    <key name="music-muted" type="b">
+      <default>true</default>
+      <summary>Music is off; the speaker button on the timeline turns it on</summary>
+    </key>
+    <key name="music-button" type="b">
+      <default>true</default>
+      <summary>Show the music button on the timeline</summary>
+    </key>
+    <key name="music-source" type="s">
+      <choices><choice value="ambient"/><choice value="folder"/></choices>
+      <default>'ambient'</default>
+      <summary>Play the built-in ambient music, or the tracks in a folder</summary>
+    </key>
+    <key name="music-folder" type="s">
+      <default>''</default>
+      <summary>Folder of music to play, shuffled</summary>
+    </key>
+    <key name="music-volume" type="d">
+      <range min="0" max="100"/><default>35</default>
+    </key>
+    <key name="music-when-hidden" type="b">
+      <default>false</default>
+      <summary>Keep playing while windows hide the desktop</summary>
     </key>
 
     <!-- Power and OLED care -->

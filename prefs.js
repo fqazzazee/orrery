@@ -5,7 +5,7 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {MISSIONS} from './lib/missions.js';
-import {BODY} from './lib/bodies.js';
+import {placeName} from './lib/bodies.js';
 
 export default class OrreryPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -15,6 +15,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
         window.add(this._viewPage());
         window.add(this._contentPage());
         window.add(this._missionsPage());
+        window.add(this._musicPage());
         window.add(this._powerPage());
     }
 
@@ -83,6 +84,8 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._spin('Replay starts in', 'replay-start-year', 1970, 2025, 1),
             this._spin('Replay speed', 'days-per-second', 0.5, 400, 0.5,
                 'Simulated days per second. 12 makes a year pass in about 30 seconds', 1),
+            this._switch('Carry on into the future', 'replay-into-future',
+                'Replay past today, through the planned flybys and arrivals up to the 2030s, before starting over'),
             restart,
         ]));
         page.add(this._group('Spin', [
@@ -119,8 +122,14 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._switch('Orbits', 'show-orbits'),
             this._switch('Names', 'show-labels'),
             this._switch('Stars', 'show-stars'),
-            this._switch('Asteroid and Kuiper belts', 'show-belts'),
+            this._switch('Asteroid and Kuiper belts', 'show-belts', 'With Jupiter’s Trojan asteroids, 60° ahead and behind it'),
             this._switch('Pluto', 'show-pluto'),
+            this._switch('Moons', 'show-moons',
+                'The 22 biggest moons, on a squeezed scale around their planets. Our Moon shows its real phase'),
+            this._switch('Ceres, Vesta and comets', 'show-small-bodies',
+                'The two biggest asteroids, Halley’s Comet and interstellar visitors like 3I/ATLAS. Asteroids that missions visit appear while they are there'),
+            this._switch('Lagrange points', 'show-lagrange',
+                'Where telescopes like JWST park (L1 and L2 are drawn a little way out from Earth, as they are too close to see)'),
         ]));
         page.add(this._group('Text', [
             this._switch('Fact cards', 'show-facts', 'Distances, speeds and trivia, plus a card at each mission event'),
@@ -135,6 +144,16 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 ['always', 'Always'],
                 ['never', 'Never'],
             ], 'Scrub through time, change speed and jump to mission events'), 'interactive'),
+            this._dependsOn(this._combo('Timeline position', 'timeline-position', [
+                ['bottom', 'Bottom'],
+                ['bottom-left', 'Bottom left'],
+                ['bottom-right', 'Bottom right'],
+                ['top', 'Top'],
+                ['top-left', 'Top left'],
+                ['top-right', 'Top right'],
+            ], 'Anything in the same corner moves out of its way'), 'interactive'),
+            this._switch('Show in the overview', 'show-in-overview',
+                'The solar system in the Activities overview, behind the app grid and while switching workspaces, instead of the plain wallpaper'),
             this._switch('Sunlight view', 'sunlight-view',
                 'Color the plane of the planets by how much sunlight falls there, from 9,000 W/m² at Mercury to 1.5 at Neptune'),
         ]));
@@ -182,13 +201,19 @@ export default class OrreryPreferences extends ExtensionPreferences {
 
     _missionsPage() {
         const page = new Adw.PreferencesPage({title: 'Missions', icon_name: 'starred-symbolic'});
-        const group = new Adw.PreferencesGroup({
-            title: 'Missions',
-            description: 'Each path is rebuilt from the real dates of its encounters; between them it follows the orbit that joins those points, so small engine burns are left out.',
-        });
+        const groups = {
+            craft: new Adw.PreferencesGroup({
+                title: 'Spacecraft',
+                description: 'Each path is rebuilt from the real dates of its encounters (and the planned dates of those to come), checked against NASA JPL’s trajectories.',
+            }),
+            observatory: new Adw.PreferencesGroup({
+                title: 'Observatories',
+                description: 'Telescopes and Sun-watchers parked at the Lagrange points L1 and L2.',
+            }),
+        };
         for (const m of MISSIONS) {
-            const flybys = m.events.filter(ev => ev.kind === 'flyby' && ev.at).map(ev => BODY[ev.at]?.name);
-            const route = flybys.filter((n, i) => n !== flybys[i - 1]).join(', ');
+            const stops = m.events.filter(ev => (ev.kind === 'flyby' || ev.kind === 'arrive') && ev.at).map(ev => placeName(ev.at, true));
+            const route = stops.filter((n, i) => n !== stops[i - 1]).join(', ');
             const row = new Adw.SwitchRow({
                 title: m.name,
                 subtitle: `${m.agency} · ${m.events[0].date.slice(0, 4)}${route ? ` · ${route}` : ''}`,
@@ -205,9 +230,62 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 if (list.join() !== this._settings.get_strv('disabled-missions').join())
                     this._settings.set_strv('disabled-missions', list);
             });
-            group.add(row);
+            groups[m.group === 'observatory' ? 'observatory' : 'craft'].add(row);
         }
-        page.add(group);
+        page.add(groups.craft);
+        page.add(groups.observatory);
+        return page;
+    }
+
+    _musicPage() {
+        const page = new Adw.PreferencesPage({title: 'Music', icon_name: 'audio-x-generic-symbolic'});
+
+        const folderRow = new Adw.ActionRow({title: 'Music folder'});
+        const syncFolder = () => {
+            folderRow.subtitle = this._settings.get_string('music-folder') || 'None chosen';
+        };
+        syncFolder();
+        this._settings.connect('changed::music-folder', syncFolder);
+        const choose = new Gtk.Button({label: 'Choose…', valign: Gtk.Align.CENTER});
+        choose.connect('clicked', () => {
+            const dialog = new Gtk.FileDialog({title: 'Music folder', modal: true});
+            const current = this._settings.get_string('music-folder');
+            if (current)
+                dialog.initial_folder = Gio.File.new_for_path(current);
+            dialog.select_folder(choose.get_root(), null, (_d, res) => {
+                try {
+                    const folder = dialog.select_folder_finish(res);
+                    if (folder) {
+                        this._settings.set_string('music-folder', folder.get_path());
+                        this._settings.set_string('music-source', 'folder');
+                    }
+                } catch {
+                    // Cancelled.
+                }
+            });
+        });
+        folderRow.add_suffix(choose);
+        const syncSource = () => {
+            folderRow.sensitive = this._settings.get_string('music-source') === 'folder';
+        };
+        syncSource();
+        this._settings.connect('changed::music-source', syncSource);
+
+        const playing = new Adw.SwitchRow({title: 'Play music'});
+        this._settings.bind('music-muted', playing, 'active', Gio.SettingsBindFlags.INVERT_BOOLEAN);
+
+        page.add(this._group('Background music', [
+            playing,
+            this._switch('Speaker button on the timeline', 'music-button', 'Turn the music on and off from the desktop'),
+            this._combo('Music', 'music-source', [
+                ['ambient', 'Built-in ambient'],
+                ['folder', 'My own music'],
+            ], 'The built-in music is made up as it plays: slow chords, a low drone and soft bells, never quite the same twice'),
+            folderRow,
+            this._spin('Volume', 'music-volume', 0, 100, 5, 'Percent'),
+            this._switch('Keep playing behind windows', 'music-when-hidden',
+                'Otherwise the music fades out while windows cover the desktop, and comes back with it'),
+        ], 'Music stops while the screen is locked. To hear the Solar System Scope soundtrack, or anything else, put your copies of the tracks in a folder and choose it here: MP3, Ogg, Opus, FLAC, WAV and M4A all play.'));
         return page;
     }
 }

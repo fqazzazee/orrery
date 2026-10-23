@@ -3,7 +3,8 @@
 import System from 'system';
 
 import * as A from '../lib/astro.js';
-import {bodyDetails, missionDetails} from '../lib/facts.js';
+import {BODIES, LAGRANGE, MOONS, SMALL_BODIES} from '../lib/bodies.js';
+import {bodyDetails, details, missionDetails, missionStatus} from '../lib/facts.js';
 import {buildTrajectories} from '../lib/missions.js';
 import {sunlightColor} from '../lib/render.js';
 
@@ -66,7 +67,7 @@ for (const tr of buildTrajectories()) {
         worst = Math.max(worst, A.norm(A.sub(p, A.bodyPosition(ev.at, ev.t))));
     }
     check(worst < 2e-3, `${tr.mission.name} meets every flyby target (worst ${worst.toExponential(1)} AU)`);
-    check(tr.segments.every(s => s.kind !== 'fly' || Math.abs(s.orbit.e - 1) > 1e-3), `${tr.mission.name} has no degenerate legs`);
+    check(tr.segments.every(s => s.kind !== 'fly' || s.hop || Math.abs(s.orbit.e - 1) > 1e-3), `${tr.mission.name} has no degenerate legs`);
 }
 {
     const parker = buildTrajectories().find(t => t.mission.id === 'parker');
@@ -105,7 +106,9 @@ check(near(A.inclinationDeg(A.planetOrbit('mercury', A.J2000)), 7.0, 0.05), 'Mer
 {
     const t = A.jd('2024-12-24');
     const mars = bodyDetails('mars', t);
-    check(mars.lines.length === 2 && mars.stats.length >= 12 && mars.notes.length > 0, 'Mars details have lines, stats and notes');
+    check(mars.lines.length === 2 && mars.stats.length >= 6 && mars.sections.some(x => x.title === 'Did you know' && x.notes.length > 5),
+        'Mars details have lines, stats and trivia');
+    check(mars.sections.some(x => x.title.startsWith('Moons') && x.links.length === 2), 'Mars lists Phobos and Deimos');
     check(bodyDetails('earth', t).stats.every(([k]) => k !== 'From Earth'), 'Earth is not measured from itself');
     const sun = bodyDetails('sun', t);
     check(sun.title === 'The Sun' && sun.stats.length > 0, 'Sun details');
@@ -116,8 +119,54 @@ check(near(A.inclinationDeg(A.planetOrbit('mercury', A.J2000)), 7.0, 0.05), 'Mer
         `Parker at perihelion gets hundreds of times Earth's sunlight (${sunlight})`);
     const mid = missionDetails(parker, A.jd('2021-06-01')).events;
     check(mid.length === 8 && mid.some(e => e.past) && mid.some(e => !e.past), 'mission events split past and future');
-    check(pd.events.at(-1).ev === parker.events.filter(e => e.kind !== 'point' || e.title).at(-1), 'after the last event, the list ends with it');
+    check(pd.events.at(-1).ev === parker.milestones.filter(e => e.kind !== 'point' || e.title).at(-1), 'after the last event, the list ends with it');
     check(missionDetails(parker, A.jd('2010-01-01')).lines[0].startsWith('Launches'), 'before launch says when it launches');
+}
+
+// Every place has a card, on several dates, with no gaps in its text.
+{
+    const ids = [...BODIES, ...MOONS, ...SMALL_BODIES, ...LAGRANGE].map(x => x.id);
+    let bad = [];
+    for (const t of ['1980-01-01', '2026-10-23', '2034-06-01'].map(A.jd)) {
+        for (const id of ids) {
+            try {
+                const d = details(id, t);
+                const text = JSON.stringify(d);
+                if (!d.title || !d.lines.length || /undefined|NaN|null,|\[object/.test(text))
+                    bad.push(`${id}: ${text.match(/.{0,40}(undefined|NaN|null,|\[object).{0,20}/)?.[0]}`);
+            } catch (e) {
+                bad.push(`${id}: ${e.message}`);
+            }
+        }
+    }
+    check(!bad.length, `every place has a clean card${bad.length ? `: ${bad.slice(0, 4).join('; ')}` : ''}`);
+    let badMissions = [];
+    for (const tr of buildTrajectories()) {
+        for (const t of [tr.launch - 10, tr.launch + 100, A.jd('2026-10-23')]) {
+            const text = JSON.stringify(missionDetails(tr, t)) + (missionStatus(tr, t) ?? '');
+            if (/undefined|NaN/.test(text))
+                badMissions.push(`${tr.mission.id}: ${text.match(/.{0,40}(undefined|NaN).{0,20}/)[0]}`);
+        }
+    }
+    check(!badMissions.length, `every mission card is clean${badMissions.length ? `: ${badMissions.slice(0, 3).join('; ')}` : ''}`);
+}
+
+// Lagrange points, sky geometry and small bodies.
+{
+    const t = A.jd('2026-06-01');
+    const e = A.planetPosition('earth', t);
+    const ang = (a, b) => Math.acos(A.dot(a, b) / (A.norm(a) * A.norm(b))) * 180 / Math.PI;
+    const ahead = ((A.longitudeDeg(A.bodyPosition('l4', t)) - A.longitudeDeg(e)) % 360 + 360) % 360;
+    check(near(ang(A.bodyPosition('l4', t), e), 60, 0.1) && near(ahead, 60, 0.5), 'L4 is 60 degrees ahead of Earth');
+    check(near(A.norm(A.sub(A.bodyPosition('l2', t), e)) * A.AU_KM, 1.5e6, 2e4), 'L2 is 1.5 million km beyond Earth');
+    const opp = A.nextAlignment('mars', A.jd('2026-10-01'));
+    check(opp && Math.abs(opp - A.jd('2027-02-19')) < 3, `Mars opposition on 19 Feb 2027 (${opp && A.formatDate(opp)})`);
+    check(A.moonPhase(A.jd('2024-01-25') + 0.25).lit > 0.98 && A.moonPhase(A.jd('2024-02-09') + 0.5).lit < 0.03, 'Moon phase: full on 25 Jan 2024, new on 9 Feb');
+    const ap = A.norm(A.sub(A.bodyPosition('apophis', A.jd('2029-04-13') + 0.4), A.planetPosition('earth', A.jd('2029-04-13') + 0.4)));
+    check(ap < 0.005, `Apophis passes close to Earth on 13 Apr 2029 (${ap.toFixed(4)} AU)`);
+    const h = A.norm(A.bodyPosition('halley', A.jd('1986-02-09')));
+    check(near(h, 0.586, 0.02), `Halley at perihelion in Feb 1986 (${h.toFixed(3)} AU)`);
+    check(near(A.norm(A.bodyPosition('3i', A.jd('2025-10-29') + 0.44)), 1.357, 0.01), '3I/ATLAS at perihelion on 29 Oct 2025');
 }
 
 print(failed ? `\n${failed} failed` : '\nall passed');

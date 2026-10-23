@@ -5,16 +5,19 @@ A live solar system as your GNOME wallpaper, drawn on pure black for OLED screen
 - **Real positions.** Planets sit where they really were (or are) on the date shown, from NASA JPL's orbital elements (good from 1800 to 2050).
 - **3D look.** You see the system from an angle. Each planet is a lit sphere with a sharp day/night line, turning on its real axis: Uranus rolls on its side, and Saturn's rings tilt the way they really do.
 - **Relative speeds.** Planets orbit at their true relative speeds. They also spin at their true speeds relative to each other, on a slower clock so Jupiter's 10-hour day does not blur.
-- **The space age, replayed.** Thirteen missions fly the gravity assists they really flew, on the real dates: Mariner 10, Pioneer 10 and 11, both Voyagers, Galileo, Cassini, Rosetta, MESSENGER, New Horizons, Juno, Parker Solar Probe and BepiColombo. A card pops up at each launch, flyby and arrival.
+- **The space age, replayed, and what is coming.** 37 spacecraft fly the gravity assists they really flew, on the real dates: Mariner 10, Pioneer 10 and 11, both Voyagers, Giotto, Galileo, Ulysses, Cassini, Rosetta, MESSENGER, New Horizons, Dawn, Juno, Hayabusa2, OSIRIS-REx/APEX, Parker Solar Probe, BepiColombo, Solar Orbiter, DART and Lucy. Missions on their way fly their planned routes into the 2030s: Psyche, Juice, Europa Clipper, Hera, Tianwen-2, ESCAPADE, MMX and Dragonfly. Telescopes and Sun-watchers sit at L1 and L2: SOHO, WMAP, Herschel, Planck, Gaia, JWST, Euclid, Aditya-L1, IMAP, Roman and PLATO. A card pops up at each launch, flyby and arrival.
+- **Moons, asteroids, comets and Lagrange points.** The 22 biggest moons circle their planets on a squeezed scale (our Moon at its real phase). Ceres and Vesta have their own orbits; Halley's Comet and the interstellar comet 3I/ATLAS grow tails near the Sun; the asteroids missions visit (Bennu, Ryugu, Apophis, Didymos, the Lucy Trojans, Arrokoth and more) appear while they are there. Markers show the Sun–Earth Lagrange points, and a swarm of dots shows Jupiter's Trojans.
 - **Fact cards.** Live numbers for the date on screen: distance from the Sun and from Earth, light and radio delay, orbital speed right now, and how long the trip would take by car, airliner or spacecraft. They rotate with trivia about each world.
 - **Live mode.** Shows the solar system right now. Voyager 1 is about 172 AU out and nearing one light-day from Earth.
-- **Interactive.** Point at a planet, an orbit, a spacecraft or its trail to trace it; click to pin a card that follows it with live numbers. Expand the card for the full sheet: distances, light delay, sunlight, orbit, size, moons and every bit of trivia. A spacecraft's card lists its encounters, and clicking one jumps there. The mission list and the fact cards can be clicked too. Right-click still opens the usual desktop menu.
-- **Timeline.** A scrubber along the bottom with a tick for every launch, flyby and arrival. Drag or scroll it to move through time, click a tick to jump to that event, and use play/pause, slower/faster and **Now**. It appears when the pointer is on the desktop and fades away after a few seconds.
+- **Interactive.** Point at anything to trace it; click to pin a card that follows it with live numbers. Expand the card for the full, scrolling sheet. A planet's has where it is in Earth's sky, its next opposition, its season, how long the trip takes, its orbit, gravity, air, magnetism, insides, moons, how it was found and named, who visited, and every bit of trivia. Moons, comets, asteroids and Lagrange points have their own; L1 and L2 list the telescopes there. A spacecraft's card lists its encounters (clicking one jumps there), its mass and power, what it is known for and where it went. Links in a card open the moon, planet or spacecraft they name. Right-click still opens the usual desktop menu.
+- **Timeline.** A scrubber with a tick for every launch, flyby and arrival, out to the planned ones in the 2030s. Drag or scroll it to move through time, click a tick to jump to that event, and use play/pause, slower/faster and **Now**. Click the playhead (or middle-click anywhere on the bar) to pause or play. Buttons at the end turn the planets' spin, the music and the sunlight view on and off. Put it at the top or bottom, centered or in a corner; whatever shares its corner moves aside. It appears when the pointer is on the desktop and fades away after a few seconds.
+- **Music.** The speaker on the timeline plays a slow ambient piece made up as it plays (drifting chords, a low drone, soft bells in long echoes), or your own music from a folder, shuffled. It fades out while windows cover the desktop and stops when the screen locks.
+- **In the overview too.** The Activities overview shows the solar system in its workspace cards and, dimmed, behind the app grid; workspaces slide by with it when you switch.
 - **Sunlight view.** The ☀ button colors the plane of the planets by how much sunlight falls there, from white-hot near the Sun through Earth's 1,361 W/m² to Neptune's 1.5, with labeled contours and the habitable zone. Planets show their sunlight in W/m² and spacecraft as a multiple of Earth's: Parker Solar Probe takes 473 times Earth's sunlight at its closest.
 
 ## How the paths are built
 
-Each leg between two encounters is the orbit that joins the two planets' real positions on those dates (Lambert's problem). The path is exact at every encounter and close in between. Engine burns between encounters are not modeled. Some legs leave from and return to a planet after a whole number of its years (Parker's Venus loops, Galileo's two-year loop). For those, any orbit with a matching period fits, so they use the craft's known number of laps and perihelion instead.
+Each leg between two encounters is the orbit that joins the two bodies' real positions on those dates (Lambert's problem). The path is exact at every encounter. Where a craft fired its engines between encounters (the ion-driven Dawn, Psyche and BepiColombo, or long loops like Ulysses's), waypoints from NASA JPL's Horizons trajectories keep it on the path it really flew: `tools/fit-waypoints.py` compares every mission with Horizons and adds waypoints until the model stays within 4% of the distance from the Sun. Some legs leave from and return to a planet after a whole number of its years (Parker's Venus loops, Galileo's two-year loop). For those, any orbit with a matching period fits, so they use the craft's known number of laps and perihelion instead.
 
 After leaving the planets, the Pioneers and Voyagers head out in their real directions at their real speeds. Distances are compressed (square root by default) so that Mercury and Neptune fit on one screen.
 
@@ -26,7 +29,7 @@ make link     # symlink this checkout into ~/.local/share/gnome-shell/extensions
 
 Log out and back in, then turn on **Orrery** in Extensions (or run `gnome-extensions enable orrery@fqazzazee.github.io`). Settings are in the extension's preferences.
 
-The scene covers the primary monitor. The overview still shows your normal wallpaper, so a plain black wallpaper makes the switch seamless.
+The scene covers the primary monitor. The overview and workspace switches show live copies of it (turn that off under Content › Interaction if you prefer your wallpaper there).
 
 Clicks reach the scene wherever no window covers the desktop. A desktop-icons extension draws a window over the whole desktop, which takes those clicks instead.
 
@@ -45,7 +48,10 @@ Clicks reach the scene wherever no window covers the desktop. A desktop-icons ex
 ## Develop
 
 ```sh
-make test     # unit tests for the orbital math and every mission path (gjs only)
+make test                    # unit tests for the orbital math, every mission path and every card (gjs only)
+tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
+
+Asteroid and comet orbits are from JPL's Small-Body Database. Mission dates after today are plans and may change.
 
 GNOME Shell 50. License: GPL-2.0-or-later.

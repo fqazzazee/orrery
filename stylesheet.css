@@ -336,3 +336,74 @@
     font-weight: 600;
     color: rgba(130, 240, 170, 0.6);
 }
+
+/* Card sheet: sections, links */
+
+.orrery-card-scroll {
+    padding-right: 2px;
+}
+
+.orrery-card-section {
+    spacing: 4px;
+    padding-top: 4px;
+}
+
+.orrery-card-section-title {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: rgba(200, 206, 225, 0.45);
+    padding-bottom: 1px;
+}
+
+.orrery-link-arrow {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 10pt;
+    color: rgba(200, 206, 225, 0.55);
+    min-width: 6px;
+}
+
+/* Moons, small bodies, Lagrange points */
+
+.orrery-small-label {
+    font-size: 7pt;
+    color: rgba(215, 222, 240, 0.38);
+}
+
+.orrery-moon-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 6.5pt;
+    font-weight: 600;
+    color: rgba(215, 222, 240, 0.5);
+}
+
+.orrery-marker-label {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 6.5pt;
+    font-weight: 600;
+}
+
+.orrery-mission-more {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    color: rgba(205, 210, 228, 0.42);
+    padding-left: 19px;
+}
+
+/* Timeline: play button and paused playhead */
+
+.orrery-button.orrery-play {
+    color: rgba(245, 247, 252, 0.92);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.orrery-button.orrery-play:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.orrery-timeline-head.orrery-timeline-head-paused {
+    background-color: #000000;
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    width: 4px;
+}

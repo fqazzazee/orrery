@@ -8,25 +8,29 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as A from './lib/astro.js';
-import {BODY, PLANETS} from './lib/bodies.js';
-import {FactDeck, bodyDetails, eventCard, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
+import {BODY, LAGRANGE, LPOINT, MOON, PLANETS, SMALL, SMALL_BODIES, SMALL_PLANETS, moonsOf, placeName} from './lib/bodies.js';
+import {FactDeck, details, eventCard, eventDate, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
+import {SceneMirror} from './lib/mirror.js';
 import {MISSIONS, buildTrajectories} from './lib/missions.js';
+import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
 import * as R from './lib/render.js';
 import {Card, Timeline, label} from './lib/ui.js';
 
 const RELAYOUT_KEYS = ['distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
     'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts',
-    'interactive', 'timeline'];
+    'interactive', 'timeline', 'timeline-position', 'show-moons', 'show-small-bodies', 'show-lagrange'];
 const SCHEDULE_KEYS = ['fps', 'pause-when-covered', 'pause-coverage', 'battery-saver', 'battery-fps',
     'idle-dim-minutes', 'adaptive-fps'];
+const MUSIC_KEYS = ['music-muted', 'music-button', 'music-source', 'music-folder', 'music-volume', 'music-when-hidden'];
 const HOLD_SECONDS = 20;          // pause on "today" before the replay starts over
 const EVENT_CARD_SECONDS = 8;
 const TRAIL_HZ = 4;
 const HUD_HZ = 2;
 const CONTROLS_SECONDS = 4;       // the timeline fades this long after the pointer stops
 const BROWSE_SECONDS = 120;       // live mode returns to today after this long untouched
-const FUTURE_DAYS = 2 * 365.25;   // how far past today the timeline reaches
+const FUTURE_DAYS = 2 * 365.25;   // the timeline reaches at least this far past today
+const LAST_JD = A.jd('2049-12-31');  // and never past the end of the planets' ephemeris
 const SPEEDS = [0.5, 1, 2, 4, 8, 12, 20, 30, 60, 120, 240, 400];
 const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
 const IDLE_FPS = 10;
@@ -49,6 +53,23 @@ function polylineDistance(pts, x, y) {
 }
 
 const sameSubject = (a, b) => !!a && !!b && (a.tr ? a.tr === b.tr : a.id === b.id);
+const LAGRANGE_COLOR = '#9fb4d8';
+const TROJAN_COLOR = '#c9b48a';
+
+// Color of any place on screen.
+function placeColor(id) {
+    if (LPOINT[id])
+        return id.startsWith('j') ? TROJAN_COLOR : LAGRANGE_COLOR;
+    return (BODY[id] ?? MOON[id] ?? SMALL[id])?.color ?? '#ffffff';
+}
+
+// A stable pseudo-random number in [0, 1) for a name.
+function hashUnit(name) {
+    let h = 2166136261;
+    for (const c of name)
+        h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    return (h >>> 0) / 4294967296;
+}
 
 // A small St.DrawingArea centered on a point.
 class Sprite {
@@ -144,8 +165,11 @@ class OrreryScene {
         this._hover = null;
         this._pin = null;             // the card for the selection
         this._dim = 1;
+        this._moonClock = 0;          // advances while the planets spin
         this.powerSaving = false;
         this.onActivity = null;
+        this.musicState = 'hidden';   // for the timeline's music button
+        this.onMusicToggle = null;
 
         this.actor = new St.Widget({style_class: 'orrery', reactive: false, clip_to_allocation: true});
         this._content = new Clutter.Actor();
@@ -157,12 +181,15 @@ class OrreryScene {
         this._content.add_child(this._sunLayer);
         this._hoverPath = new BoxCanvas(this._content);
         this._highlight = new BoxCanvas(this._content);
+        this._trojans = new BoxCanvas(this._content);
         this._trails = new BoxCanvas(this._content);
+        this._smallLayer = new Clutter.Actor();
         this._world = new Clutter.Actor();
+        this._markerLayer = new Clutter.Actor();
         this._craftLayer = new Clutter.Actor();
         this._labels = new Clutter.Actor();
         this._hud = new Clutter.Actor();
-        for (const layer of [this._world, this._craftLayer, this._labels, this._hud])
+        for (const layer of [this._smallLayer, this._world, this._markerLayer, this._craftLayer, this._labels, this._hud])
             this._content.add_child(layer);
 
         this._buildHud();
@@ -194,8 +221,14 @@ class OrreryScene {
         return A.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
     }
 
+    // Far enough ahead to take in every planned mission event.
     _endJd() {
-        return A.jdNow() + FUTURE_DAYS;
+        const last = this._events?.length ? this._events.at(-1).t + 120 : 0;
+        return Math.min(LAST_JD, Math.max(A.jdNow() + FUTURE_DAYS, last));
+    }
+
+    _intoFuture() {
+        return !this._live() && this._settings.get_boolean('replay-into-future');
     }
 
     _resetTime() {
@@ -225,8 +258,8 @@ class OrreryScene {
         if (!this._playing || this._timeline.dragging)
             return;
         // Play up to today, or to the end of the timeline if someone moved
-        // past today on purpose.
-        const end = this._jd > now + 1 ? this._endJd() : now;
+        // past today on purpose (or the replay goes on into the future).
+        const end = this._jd > now + 1 || this._intoFuture() ? this._endJd() : now;
         if (this._jd < end) {
             this._jd = Math.min(end, this._jd + dt * s.get_double('days-per-second'));
             if (this._live() && this._jd >= now)
@@ -262,7 +295,7 @@ class OrreryScene {
     _timeRuns() {
         if (this._live() && !this._browsing)
             return false;
-        return this._playing && !this._timeline.dragging && this._jd < (this._jd > A.jdNow() + 1 ? this._endJd() : A.jdNow());
+        return this._playing && !this._timeline.dragging && this._jd < (this._jd > A.jdNow() + 1 || this._intoFuture() ? this._endJd() : A.jdNow());
     }
 
     _spinning() {
@@ -320,7 +353,8 @@ class OrreryScene {
             this._playing = false;
         } else {
             this._playing = !this._playing;
-            if (this._playing && !this._live() && this._jd >= A.jdNow() - 0.5 && this._jd <= A.jdNow() + 1)
+            const end = this._intoFuture() ? this._endJd() : A.jdNow();
+            if (this._playing && !this._live() && this._jd >= end - 0.5 && this._jd <= end + 1)
                 this._seek(this._startJd());
         }
         this._browseClock = 0;
@@ -359,12 +393,25 @@ class OrreryScene {
     _buildTrajectories() {
         const disabled = this._settings.get_strv('disabled-missions');
         this._trajectories = buildTrajectories(MISSIONS.filter(m => !disabled.includes(m.id)));
-        const horizon = A.jdNow() + 3 * 365.25;
+        this._events = this._trajectories.flatMap(tr => tr.milestones).sort((a, b) => a.t - b.t);
+        const horizon = this._endJd() + 365.25;
         for (const tr of this._trajectories) {
             tr.cache = tr.samples(tr.launch, Math.min(tr.end, horizon));
             tr.rgb = R.hexToRgb(tr.mission.color);
         }
-        this._events = this._trajectories.flatMap(tr => tr.events).sort((a, b) => a.t - b.t);
+        // Asteroids and comets that are only shown while a mission visits:
+        // from its launch until a year after it leaves (or ends).
+        this._smallWindows = new Map();
+        for (const tr of this._trajectories) {
+            const visits = tr.events.filter(ev => SMALL[ev.at]);
+            for (const id of new Set(visits.map(ev => ev.at))) {
+                const last = visits.filter(ev => ev.at === id).at(-1);
+                const until = last.kind === 'arrive' ? (isFinite(tr.end) ? tr.end : Infinity) : last.t;
+                const list = this._smallWindows.get(id) ?? [];
+                list.push([tr.launch, until + 365]);
+                this._smallWindows.set(id, list);
+            }
+        }
         this._seekEvents();
     }
 
@@ -402,6 +449,7 @@ class OrreryScene {
         });
         this._unit = W / 220 * s.get_double('planet-scale') / 100;
         this._orbitCache = new Map();
+        this._trojansDrawn = null;
 
         this._buildBodies();
         this._buildCraft();
@@ -416,7 +464,7 @@ class OrreryScene {
         this._pin = this._selected = null;
         if (selected && (!selected.tr || this._trajectories.includes(selected.tr)))
             this._select(selected, {expand: expanded});
-        this._factCard?.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
+        this._factCard?.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
         this._stackEventCards();
         this._updateAll(0);
         this._showHighlight();
@@ -432,10 +480,16 @@ class OrreryScene {
         for (const b of this._bodies ?? []) {
             b.actor.destroy();
             b.label?.destroy();
+            for (const m of b.moons ?? [])
+                m.label?.destroy();
         }
-        this._comet?.sprite.destroy();
+        for (const x of [...this._smalls ?? [], ...this._lpoints ?? []]) {
+            x.sprite.destroy();
+            x.label?.destroy();
+        }
 
         const showPluto = this._settings.get_boolean('show-pluto');
+        const showSmall = this._settings.get_boolean('show-small-bodies');
         const showLabels = this._settings.get_boolean('show-labels');
         this._bodies = [];
 
@@ -443,11 +497,11 @@ class OrreryScene {
         const sunSize = Math.ceil(sunR * 7);
         const sunSprite = new Sprite(this._world, sunSize, cr => R.drawSun(cr, sunSize, sunR));
         sunSprite.repaint();
-        this._sun = {id: 'sun', R: sunR, size: sunSize, actor: sunSprite.area, pos: [0, 0, 0]};
+        this._sun = {id: 'sun', R: sunR, size: sunSize, actor: sunSprite.area, pos: [0, 0, 0], moons: [], orbits: null};
         this._bodies.push(this._sun);
 
         for (const body of PLANETS) {
-            if (body.id === 'pluto' && !showPluto)
+            if (body.id === 'pluto' && !showPluto || SMALL_PLANETS.includes(body.id) && !showSmall)
                 continue;
             const r = this._bodyRadius(body.id);
             const size = 2 * R.spriteExtent(body.id, r);
@@ -458,6 +512,10 @@ class OrreryScene {
             // surface, day/night shading, rings in front.
             b.actor = new Clutter.Actor();
             this._world.add_child(b.actor);
+            // Faint rings for the moons' orbits, shown when the planet is
+            // picked; first, so they sit behind it.
+            b.orbits = new St.DrawingArea({visible: false});
+            b.actor.add_child(b.orbits);
             const layer = paint => {
                 const area = new St.DrawingArea({width: size, height: size});
                 area.connect('repaint', a => {
@@ -480,17 +538,111 @@ class OrreryScene {
             if (R.RINGS[body.id])
                 layer(cr => R.drawRings(cr, size, body.id, r, pole, +1));
             if (showLabels) {
-                b.label = label('orrery-planet-label', body.name.toUpperCase());
+                b.label = label(SMALL_PLANETS.includes(body.id) ? 'orrery-planet-label orrery-small-label' : 'orrery-planet-label',
+                    body.name.toUpperCase());
                 this._labels.add_child(b.label);
             }
+            this._buildMoons(b);
             this._bodies.push(b);
         }
+        this._buildSmallBodies();
+        this._buildMarkers();
+    }
 
-        const cometSize = Math.ceil(this._unit * 12);
-        this._comet = {tail: [0, 0], drawn: null};
-        this._comet.sprite = new Sprite(this._world, cometSize, cr =>
-            R.drawComet(cr, cometSize, this._comet.tail[0], this._comet.tail[1]));
-        this._comet.sprite.area.hide();
+    // Moons circle their planet on a squeezed scale: just outside the planet
+    // (or its rings) out to a few planet radii, spaced by the logarithm of
+    // their real distances, in the planet's equatorial plane (the ecliptic
+    // for our Moon).
+    _buildMoons(b) {
+        b.moons = [];
+        const list = this._settings.get_boolean('show-moons') ? moonsOf(b.id) : [];
+        if (!list.length)
+            return;
+        const rings = R.RINGS[b.id];
+        const inner = (rings ? rings.at(-1)[1] * b.R : b.R) + 4;
+        const span = Math.max(10, Math.min(34, b.R * 1.6));
+        const logs = list.map(m => Math.log(m.a));
+        const [lo, hi] = [Math.min(...logs), Math.max(...logs)];
+        const planetPole = A.equatorialToEcliptic(...BODY[b.id].pole);
+        let reach = 0;
+        for (const m of list) {
+            const pole = m.ecliptic ? [0, 0, 1] : planetPole;
+            const e1 = A.unit(Math.abs(pole[2]) > 0.99 ? A.cross(pole, [1, 0, 0]) : A.cross(pole, [0, 0, 1]));
+            const e2 = A.cross(pole, e1);
+            const r = list.length === 1 ? inner + span * 0.45 : inner + span * (Math.log(m.a) - lo) / (hi - lo);
+            const dot = Math.max(1.2, Math.min(2.8, this._unit * (m.radiusKm / 6371) ** 0.45 * 0.42));
+            const size = Math.ceil(2 * dot + 1);
+            const rgb = R.hexToRgb(m.color);
+            const moon = {
+                id: m.id, data: m, r, size, R: dot, e1: this._proj.view(e1), e2: this._proj.view(e2),
+                phase0: 2 * Math.PI * hashUnit(m.id), front: true,
+            };
+            moon.area = new St.DrawingArea({width: size, height: size});
+            moon.area.connect('repaint', area => {
+                const cr = area.get_context();
+                R.drawMoon(cr, size, rgb, b.light);
+                cr.$dispose();
+            });
+            b.actor.add_child(moon.area);
+            b.moons.push(moon);
+            reach = Math.max(reach, r + size);
+        }
+        const M = Math.ceil(reach + 2);
+        b.orbits.set_size(2 * M, 2 * M);
+        b.orbits.set_translation(b.size / 2 - M, b.size / 2 - M, 0);
+        const rings2 = b.moons.map(moon => Array.from({length: 73}, (_, i) => {
+            const a = i / 72 * 2 * Math.PI;
+            return [moon.r * (Math.cos(a) * moon.e1[0] + Math.sin(a) * moon.e2[0]),
+                -moon.r * (Math.cos(a) * moon.e1[1] + Math.sin(a) * moon.e2[1])];
+        }));
+        b.orbits.connect('repaint', area => {
+            const cr = area.get_context();
+            R.drawMoonOrbits(cr, 2 * M, rings2, 0.16);
+            cr.$dispose();
+        });
+    }
+
+    // Comets and the asteroids missions visit.
+    _buildSmallBodies() {
+        this._smalls = [];
+        const showLabels = this._settings.get_boolean('show-labels');
+        for (const s of SMALL_BODIES) {
+            const x = {id: s.id, data: s, R: 3, drawn: null, tail: [0, 0], shown: false};
+            const rgb = R.hexToRgb(s.color);
+            if (s.comet) {
+                const size = Math.ceil(this._unit * 12);
+                x.sprite = new Sprite(this._smallLayer, size, cr => R.drawComet(cr, size, x.tail[0], x.tail[1], rgb));
+            } else {
+                const size = 9;
+                x.sprite = new Sprite(this._smallLayer, size, cr => R.drawSpeck(cr, size, rgb));
+                x.sprite.repaint();
+            }
+            x.sprite.area.hide();
+            if (showLabels) {
+                x.label = label('orrery-planet-label orrery-small-label', (s.short ?? s.name).toUpperCase());
+                x.label.hide();
+                this._labels.add_child(x.label);
+            }
+            this._smalls.push(x);
+        }
+    }
+
+    // Lagrange points: Sun-Earth L1 to L5, and Jupiter's Trojan camps.
+    _buildMarkers() {
+        this._lpoints = [];
+        if (!this._settings.get_boolean('show-lagrange'))
+            return;
+        for (const l of LAGRANGE) {
+            const size = 9;
+            const rgb = R.hexToRgb(placeColor(l.id));
+            const x = {id: l.id, data: l, R: 4};
+            x.sprite = new Sprite(this._markerLayer, size, cr => R.drawMarker(cr, size, rgb, l.id.startsWith('j') ? 0.45 : 0.6));
+            x.sprite.repaint();
+            x.label = label('orrery-marker-label', l.id.startsWith('j') ? l.id.slice(1).toUpperCase() : l.short);
+            x.label.set_style(`color: rgba(${rgb.map(c => Math.round(c * 255)).join(', ')}, 0.55);`);
+            this._labels.add_child(x.label);
+            this._lpoints.push(x);
+        }
     }
 
     _buildCraft() {
@@ -564,6 +716,8 @@ class OrreryScene {
             speed: dir => this._changeSpeed(dir),
             now: () => this._goNow(),
             sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
+            spin: () => this._settings.set_boolean('spin-planets', !this._settings.get_boolean('spin-planets')),
+            music: () => this.onMusicToggle?.(),
             hover: h => this._timelineHover(h),
             activity: () => this._activity(),
         });
@@ -587,17 +741,39 @@ class OrreryScene {
         const {left, right, top, bottom} = this._area;
         const m = Math.round(this._W * 0.018);
         this._margin = m;
-        this._dateBox.set_position(left + m, top + Math.round(m * 0.6));
         this._cardWidth = Math.round(Math.min(380, Math.max(260, this._W * 0.19)));
         this._missionBox.visible = show && s.get_boolean('show-missions');
 
-        // Timeline: between the mission list and the event cards.
+        // Timeline: centered between the mission list and the cards, or in
+        // a corner, at the top or bottom. Whatever shares its corner moves
+        // out of its way.
         const mode = s.get_boolean('interactive') ? s.get_string('timeline') : 'never';
         this._timelineMode = mode;
-        const tw = Math.round(Math.max(Math.min(1100, right - left - 2 * (this._cardWidth + 2 * m)), Math.min(560, right - left - 2 * m)));
+        const place = s.get_string('timeline-position');
+        const atTop = place.startsWith('top');
+        const side = place.endsWith('left') ? 'left' : place.endsWith('right') ? 'right' : 'center';
         const th = 46;
+        const tw = side === 'center'
+            ? Math.round(Math.max(Math.min(1100, right - left - 2 * (this._cardWidth + 2 * m)), Math.min(560, right - left - 2 * m)))
+            : Math.round(Math.min(760, Math.max(520, (right - left) * 0.42), right - left - 2 * m));
+        const tx = side === 'left' ? left + m : side === 'right' ? right - m - tw : Math.round((left + right - tw) / 2);
+        const ty = atTop ? top + Math.round(m * 0.6) : bottom - m - th;
         this._timeline.actor.set_size(tw, th);
-        this._timeline.actor.set_position(Math.round((left + right - tw) / 2), bottom - m - th);
+        this._timeline.actor.set_position(tx, ty);
+        this._timelineTop = atTop;
+        const on = mode !== 'never';
+        const gap = 10;
+        this._slots = {
+            dateTop: on && atTop && side === 'left' ? ty + th + gap : top + Math.round(m * 0.6),
+            cardTop: on && atTop && side === 'right' ? ty + th + gap : top + m,
+            cardBottom: (on && !atTop && side === 'right' ? ty - gap : bottom - m) - 170,
+            eventBottom: on && !atTop && side === 'right' ? ty - gap : bottom - m,
+            listBottom: on && !atTop && side === 'left' ? ty - gap : bottom - m,
+            // Where craft names and edge arrows may go.
+            sceneTop: on && atTop ? ty + th + 4 : top,
+            sceneBottom: on && !atTop ? ty - 4 : bottom,
+        };
+        this._dateBox.set_position(left + m, this._slots.dateTop);
         this._timelineRange();
         if (mode === 'always')
             this._timeline.show();
@@ -620,7 +796,7 @@ class OrreryScene {
             if (y % step === 0)
                 labels.push([t, `${y}`]);
         }
-        const events = this._events.filter(ev => ev.kind !== 'note' || ev.title)
+        const events = this._events.filter(ev => ev.kind !== 'note' && ev.kind !== 'point' || ev.title)
             .map(ev => ({t: ev.t, kind: ev.kind, ev, rgb: R.hexToRgb(ev.mission.color)}));
         this._timeline.setRange({t0, t1, now, years, labels, events});
     }
@@ -632,6 +808,8 @@ class OrreryScene {
             speed: dps >= 1 ? `${+dps.toFixed(1)} d/s` : `${dps} d/s`,
             sunlight: this._settings.get_boolean('sunlight-view'),
             live: this._live() && !this._browsing,
+            spinning: this._settings.get_boolean('spin-planets'),
+            music: this.musicState,
         });
     }
 
@@ -650,7 +828,7 @@ class OrreryScene {
         else if (!this._playing)
             caption = 'Paused · press play on the timeline to go on';
         else if (this._jd > now + 0.5)
-            caption = `Ahead of today · ${dps} days per second`;
+            caption = `Ahead of today: planned missions · ${dps} days per second`;
         else if (today)
             caption = 'Today · the replay starts over shortly';
         else
@@ -671,11 +849,26 @@ class OrreryScene {
 
         if (!this._missionBox.visible)
             return;
-        const active = [];
+        // Spacecraft in flight (telescopes have their Lagrange point's card).
+        let active = [];
         for (const tr of this._trajectories) {
-            const status = missionStatus(tr, this._jd);
+            const status = tr.mission.group === 'observatory' ? null : missionStatus(tr, this._jd);
             if (status)
                 active.push([tr, status]);
+        }
+        // On a short screen, keep the picked one and those with the most
+        // going on (an event nearest in time), and count the rest.
+        const rowH = this._missionRows.values().next().value?.box.height || 20;
+        const room = this._slots.listBottom - (this._dateBox.y + this._dateBox.height + (this._legend.visible ? this._legend.height + 12 : 0) + 30);
+        const fit = Math.max(1, Math.floor(room / rowH) - 1);
+        if (active.length > fit + 1) {
+            const busy = tr => sameSubject(this._selected, {tr}) ? -Infinity
+                : Math.min(...tr.milestones.map(ev => Math.abs(ev.t - this._jd)));
+            const keep = new Set(active.map(([tr]) => tr).sort((a, b) => busy(a) - busy(b)).slice(0, fit));
+            this._moreMissions = active.length - fit;
+            active = active.filter(([tr]) => keep.has(tr));
+        } else {
+            this._moreMissions = 0;
         }
         const ids = new Set(active.map(([tr]) => tr.mission.id));
         for (const [id, row] of this._missionRows) {
@@ -710,9 +903,18 @@ class OrreryScene {
             row.status.text = status;
             row.box[sameSubject(this._selected, {tr}) ? 'add_style_class_name' : 'remove_style_class_name']('orrery-mission-selected');
         }
+        if (this._moreMissions) {
+            this._moreLabel ??= label('orrery-mission-more');
+            if (!this._moreLabel.get_parent())
+                this._missionBox.add_child(this._moreLabel);
+            this._missionBox.set_child_above_sibling(this._moreLabel, null);
+            this._moreLabel.text = `+ ${this._moreMissions} more in flight`;
+        } else if (this._moreLabel?.get_parent()) {
+            this._missionBox.remove_child(this._moreLabel);
+        }
         // Rows are padded buttons; shift left so the names line up with the date.
         const h = this._missionBox.get_preferred_height(-1)[1];
-        this._missionBox.set_position(this._area.left + this._margin - 6, this._area.bottom - this._margin - h);
+        this._missionBox.set_position(this._area.left + this._margin - 6, this._slots.listBottom - h);
     }
 
     // Planet and craft names; in the sunlight view they also say how much
@@ -804,8 +1006,9 @@ class OrreryScene {
         if (s.get_boolean('show-orbits')) {
             for (const b of this._bodies.slice(1)) {
                 const pts = this._orbitPath(b.id);
-                R.strokePath(cr, pts, R.hexToRgb(BODY[b.id].color), b.id === 'pluto' ? 0.13 : 0.2, 1,
-                    b.id === 'pluto' ? [3, 4] : null);
+                const minor = SMALL_PLANETS.includes(b.id);
+                R.strokePath(cr, pts, R.hexToRgb(BODY[b.id].color), b.id === 'pluto' ? 0.13 : minor ? 0.1 : 0.2, 1,
+                    b.id === 'pluto' || minor ? [3, 4] : null);
             }
         }
         cr.$dispose();
@@ -816,13 +1019,7 @@ class OrreryScene {
         const hit = this._orbitCache.get(id);
         if (hit && Math.abs(hit.jd - this._jd) < 3650)
             return hit.pts;
-        const o = A.planetOrbit(id, this._jd);
-        const pts = [];
-        for (let i = 0; i <= 240; i++) {
-            const E = i / 240 * 2 * Math.PI;
-            const x = o.a * (Math.cos(E) - o.e), y = o.a * Math.sqrt(1 - o.e * o.e) * Math.sin(E);
-            pts.push(this._proj.project(A.add(A.scale(o.p, x), A.scale(o.q, y))));
-        }
+        const pts = A.orbitPoints(A.planetOrbit(id, this._jd)).map(p => this._proj.project(p));
         this._orbitCache.set(id, {jd: this._jd, pts});
         return pts;
     }
@@ -849,6 +1046,7 @@ class OrreryScene {
         if (dt === 0 || this._trailClock >= 1 / TRAIL_HZ) {
             this._trailClock = 0;
             this._updateTrails();
+            this._updateTrojans();
             if (this._subject()?.tr)
                 this._showHighlight();
         }
@@ -859,6 +1057,7 @@ class OrreryScene {
         } else {
             this._timeline.setTime(this._jd);
         }
+        this._declutter();
         if (this._settings.get_boolean('pixel-shift')) {
             const t = this._realTime;
             const dx = Math.round(4 * Math.sin(t * 2 * Math.PI / 600));
@@ -905,33 +1104,16 @@ class OrreryScene {
             if (!b.shaded || b.R * Math.sqrt(Math.max(0, 2 * (1 - A.dot(b.light, b.shaded)))) > 0.6) {
                 b.shaded = b.light;
                 b.shade.queue_repaint();
+                for (const m of b.moons)
+                    m.area.queue_repaint();
             }
+            this._updateMoons(b, spinDay);
         }
+        if (spinning)
+            this._moonClock = this._realTime;
+        this._updateMarkers();
 
-        // The comet Rosetta chased, while Rosetta is around.
-        const rosetta = this._trajectories.find(tr => tr.mission.id === 'rosetta');
-        const cometOn = rosetta && this._settings.get_boolean('show-missions') &&
-            this._jd > rosetta.launch && this._jd < rosetta.end + 365;
-        this._comet.sprite.area.visible = !!cometOn;
-        if (cometOn) {
-            const p = A.bodyPosition('67p', this._jd);
-            const [x, y, depth] = this._proj.project(p);
-            const [sx, sy] = [this._proj.cx, this._proj.cy];
-            const r = A.norm(p);
-            const angle = Math.atan2(y - sy, x - sx);
-            const len = r < 4 ? this._unit * 5 * (4 - r) / 3 : 0;
-            this._comet.sprite.moveTo(x, y);
-            this._comet.pos = p;
-            this._comet.x = x;
-            this._comet.y = y;
-            order.push([depth, this._comet.sprite.area]);
-            const d = this._comet.drawn;
-            if (!d || Math.abs(wrapAngle(angle - d[0])) > 0.03 || Math.abs(len - d[1]) > 0.5) {
-                this._comet.tail = [angle, len];
-                this._comet.drawn = [angle, len];
-                this._comet.sprite.repaint();
-            }
-        }
+        this._updateSmallBodies();
 
         // Painter's order: farther from the camera first.
         order.sort((a, b) => a[0] - b[0]);
@@ -942,18 +1124,172 @@ class OrreryScene {
         }
     }
 
+    _updateMoons(b, spinDay) {
+        if (!b.moons.length)
+            return;
+        const c = b.size / 2;
+        for (const m of b.moons) {
+            let a;
+            if (m.id === 'moon') {
+                // Our Moon sits where it really is: its phase sets its angle
+                // from the Sun as seen from Earth.
+                const sunLon = A.longitudeDeg(A.scale(b.pos, -1)) * Math.PI / 180;
+                a = sunLon + 2 * Math.PI * A.moonPhase(this._jd).age;
+            } else {
+                a = m.phase0 + 2 * Math.PI * this._moonClock / (Math.abs(m.data.period) * spinDay) * Math.sign(m.data.period);
+            }
+            const [ca, sa] = [Math.cos(a), Math.sin(a)];
+            const dx = m.r * (ca * m.e1[0] + sa * m.e2[0]);
+            const dy = -m.r * (ca * m.e1[1] + sa * m.e2[1]);
+            const front = ca * m.e1[2] + sa * m.e2[2] > 0;
+            m.x = b.x + dx;
+            m.y = b.y + dy;
+            m.area.set_translation(Math.round(c + dx - m.size / 2), Math.round(c + dy - m.size / 2), 0);
+            if (front !== m.front) {
+                m.front = front;
+                if (front)
+                    b.actor.set_child_above_sibling(m.area, null);
+                else
+                    b.actor.set_child_above_sibling(m.area, b.orbits);
+            }
+            if (m.label) {
+                m.label.visible = true;   // _declutter() decides
+                const w = m.label.width || m.label.get_preferred_width(-1)[1];
+                m.label.set_translation(Math.round(m.x - w / 2), Math.round(m.y + m.R + 2), 0);
+            }
+        }
+    }
+
+    _smallVisible(x) {
+        const s = x.data, jd = this._jd;
+        if (s.show === 'always')
+            return this._settings.get_boolean('show-small-bodies');
+        if (Array.isArray(s.show))
+            return this._settings.get_boolean('show-small-bodies') && jd > A.jd(s.show[0]) && jd < A.jd(s.show[1]);
+        return this._settings.get_boolean('show-missions') &&
+            (this._smallWindows.get(x.id) ?? []).some(([t0, t1]) => jd > t0 && jd < t1);
+    }
+
+    // Comets (with a tail pointing away from the Sun, longer up close) and
+    // asteroids, each while it is of interest.
+    _updateSmallBodies() {
+        const [sx, sy] = [this._proj.cx, this._proj.cy];
+        for (const x of this._smalls) {
+            const on = this._smallVisible(x);
+            if (on !== x.shown) {
+                x.shown = on;
+                x.sprite.area.visible = on;
+            }
+            if (!on) {
+                x.label?.hide();
+                continue;
+            }
+            const p = A.bodyPosition(x.id, this._jd);
+            const [px, py] = this._proj.project(p);
+            x.pos = p;
+            x.x = px;
+            x.y = py;
+            x.sprite.moveTo(px, py);
+            if (x.data.comet) {
+                const r = A.norm(p);
+                const angle = Math.atan2(py - sy, px - sx);
+                const len = r < 4 ? this._unit * 5 * (4 - r) / 3 : 0;
+                const d = x.drawn;
+                if (!d || Math.abs(wrapAngle(angle - d[0])) > 0.03 || Math.abs(len - d[1]) > 0.5) {
+                    x.tail = [angle, len];
+                    x.drawn = [angle, len];
+                    x.sprite.repaint();
+                }
+            }
+            if (x.label) {
+                const featured = sameSubject(this._subject(), {id: x.id}) || sameSubject(this._hover, {id: x.id});
+                x.label.visible = featured || x.data.comet || this._smallNear(x.id);
+                if (x.label.visible) {
+                    const w = x.label.width || x.label.get_preferred_width(-1)[1];
+                    x.label.set_translation(Math.round(px - w / 2), Math.round(py + 5), 0);
+                }
+            }
+        }
+    }
+
+    // Is a mission at (or within a few months of) this asteroid?
+    _smallNear(id) {
+        return this._events.some(ev => ev.at === id && Math.abs(ev.t - this._jd) < 120) ||
+            this._trajectories.some(tr => tr.segmentAt(this._jd)?.body === id);
+    }
+
+    // L1 and L2 are only 1.5 million km from Earth, far too close to see at
+    // this scale, so they are drawn a little way out along the Sun-Earth
+    // line, past the Moon. The others sit where they really are.
+    _updateMarkers() {
+        if (!this._lpoints.length)
+            return;
+        const earth = this._bodyById('earth');
+        const [dx, dy] = [this._proj.cx - earth.x, this._proj.cy - earth.y];
+        const n = Math.hypot(dx, dy) || 1;
+        const k = Math.max(earth.R * 3.2, (earth.moons[0]?.r ?? earth.R * 2) + 9);
+        for (const x of this._lpoints) {
+            if (x.id === 'l1' || x.id === 'l2') {
+                const s = x.id === 'l1' ? k : -k;
+                [x.x, x.y] = [earth.x + dx / n * s, earth.y + dy / n * s];
+            } else {
+                [x.x, x.y] = this._proj.project(A.bodyPosition(x.id, this._jd));
+            }
+            x.sprite.moveTo(x.x, x.y);
+            if (x.label) {
+                x.label.visible = true;   // _declutter() decides
+                const w = x.label.width || x.label.get_preferred_width(-1)[1];
+                x.label.set_translation(Math.round(x.x - w / 2), Math.round(x.y + 5), 0);
+            }
+        }
+    }
+
+    // A swarm of dots 60 degrees either side of Jupiter: the Trojans.
+    _updateTrojans() {
+        const jup = this._bodyById('jupiter');
+        if (!this._settings.get_boolean('show-belts') || !jup) {
+            this._trojans.hide();
+            return;
+        }
+        if (this._trojansDrawn && Math.hypot(jup.x - this._trojansDrawn[0], jup.y - this._trojansDrawn[1]) < 1.5)
+            return;
+        this._trojansDrawn = [jup.x, jup.y];
+        if (!this._trojanCloud) {
+            const rnd = R.seeded(1772);
+            const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 0.5;
+            this._trojanCloud = Array.from({length: 520}, (_, i) =>
+                [(i % 2 ? 60 : -60) + gauss() * 11, 1 + gauss() * 0.035, gauss() * 0.12, 0.35 + rnd() * 0.65]);
+        }
+        const o = A.planetOrbit('jupiter', this._jd);
+        const n = A.unit(A.cross(o.p, o.q));
+        const p = jup.pos;
+        const pts = this._trojanCloud.map(([dl, dr, dz, a]) => {
+            const q = A.add(A.scale(A.rotateAbout(p, n, dl), dr), A.scale(n, dz * A.norm(p)));
+            return [...this._proj.project(q).slice(0, 2), a];
+        });
+        this._trojans.update(pts, [this._W, this._H], cr => R.drawDots(cr, pts, 0.28, 0.55));
+    }
+
     _bodyById(id) {
-        if (id === '67p')
-            return this._comet;
-        return this._bodies.find(b => b.id === id);
+        return this._bodies.find(b => b.id === id) ?? this._smalls?.find(x => x.id === id) ??
+            this._lpoints?.find(x => x.id === id) ?? this._moonById(id);
+    }
+
+    _moonById(id) {
+        for (const b of this._bodies) {
+            const m = b.moons?.find(x => x.id === id);
+            if (m)
+                return m;
+        }
+        return null;
     }
 
     _updateCraft() {
         const show = this._settings.get_boolean('show-missions');
         const showLabels = this._settings.get_boolean('show-labels');
         const sunlight = this._settings.get_boolean('sunlight-view');
-        const {left, right, top} = this._area;
-        const bottom = this._timelineMode === 'never' ? this._area.bottom : this._timeline.actor.y - 4;
+        const {left, right} = this._area;
+        const {sceneTop: top, sceneBottom: bottom} = this._slots;
         const inset = 10;
         const placed = [];   // edge labels so far, so they do not overlap
         for (const tr of this._trajectories) {
@@ -969,11 +1305,17 @@ class OrreryScene {
             }
             let x, y;
             if (seg.kind === 'stay') {
-                // Circle the body it orbits.
+                // Circle the body it orbits (or loop around its Lagrange point).
                 const b = this._bodyById(seg.body);
-                const ang = this._realTime * 2 * Math.PI / 6 + tr.mission.id.length;
-                const rr = (b?.R ?? 2) + 5;
+                const ang = this._realTime * 2 * Math.PI / 6 + 2 * Math.PI * hashUnit(tr.mission.id);
+                const rr = (b?.R ?? 2) + (LPOINT[seg.body] ? 2 + 3 * hashUnit(`${tr.mission.id}r`) : 5);
                 [x, y] = [(b?.x ?? 0) + rr * Math.cos(ang), (b?.y ?? 0) + rr * Math.sin(ang) * 0.55];
+            } else if (seg.hop) {
+                // Short trips near a planet slide between the places as drawn,
+                // since L1 and L2 are drawn away from their true spots.
+                const [a, b] = [this._screenOf(seg.from), this._screenOf(seg.to)];
+                const k = smooth((this._jd - seg.t0) / (seg.t1 - seg.t0));
+                [x, y] = [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
             } else {
                 [x, y] = this._proj.project(seg.pos(this._jd));
             }
@@ -982,7 +1324,8 @@ class OrreryScene {
             tr.marker.area.visible = onScreen;
             tr.marker.moveTo(x, y);
             const featured = sameSubject(this._selected, {tr}) || sameSubject(this._hover, {tr});
-            tr.label.visible = onScreen && (showLabels || featured);
+            // Telescopes crowd around L1 and L2, so they are named only on request.
+            tr.label.visible = onScreen && (showLabels && tr.mission.group !== 'observatory' || featured);
             if (tr.label.visible) {
                 // Far craft can project near the Sun when they climb out of
                 // the ecliptic toward or away from the camera; say how far.
@@ -1020,6 +1363,50 @@ class OrreryScene {
                 tr.edge.set_translation(Math.round(ex), Math.round(ey), 0);
             }
         }
+    }
+
+    // Hide names that would land on top of more important ones: planets
+    // first, then whatever is picked or pointed at, spacecraft, comets,
+    // asteroids and Lagrange points.
+    _declutter() {
+        const featured = s => sameSubject(this._subject(), s) || sameSubject(this._hover, s);
+        const items = [];
+        const add = (actor, prio) => {
+            if (actor?.visible)
+                items.push([prio, actor]);
+        };
+        for (const b of this._bodies)
+            add(b.label, 0);
+        for (const tr of this._trajectories)
+            add(tr.label, featured({tr}) ? 1 : 2);
+        for (const x of this._smalls)
+            add(x.label, featured({id: x.id}) ? 1 : x.data.comet ? 3 : 4);
+        for (const x of this._lpoints)
+            add(x.label, featured({id: x.id}) ? 1 : 5);
+        for (const b of this._bodies) {
+            for (const m of b.moons)
+                add(m.label, featured({id: m.id}) ? 1 : 3);
+        }
+        items.sort((a, b) => a[0] - b[0]);
+        const placed = [];
+        for (const [prio, actor] of items) {
+            const w = actor.width || actor.get_preferred_width(-1)[1];
+            const h = actor.height || actor.get_preferred_height(-1)[1];
+            const [x0, y0] = [actor.translation_x, actor.translation_y];
+            const r = [x0 + 1, y0 + 2, x0 + w - 1, y0 + h - 2];
+            if (prio > 1 && placed.some(q => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1]))
+                actor.visible = false;
+            else
+                placed.push(r);
+        }
+    }
+
+    // Where an event's place is drawn on screen.
+    _screenOf(ev) {
+        const b = ev?.at && this._bodyById(ev.at);
+        if (b)
+            return [b.x, b.y];
+        return ev ? this._proj.project(ev.via ?? A.bodyPosition(ev.at ?? 'earth', ev.t)).slice(0, 2) : [0, 0];
     }
 
     _updateTrails() {
@@ -1113,7 +1500,7 @@ class OrreryScene {
     }
 
     _stackEventCards() {
-        let y = this._area.bottom - this._margin;
+        let y = this._slots.eventBottom;
         const x = this._area.right - this._margin - this._cardWidth;
         for (const c of this._eventCards) {
             y -= c.card.height;
@@ -1198,7 +1585,7 @@ class OrreryScene {
             return n && subject.tr.marker?.area.visible ? [n[0], n[1], 6] : null;
         }
         const b = this._bodyById(subject.id);
-        return b ? [b.x, b.y, b.R + 4] : null;
+        return b && b.x !== undefined && b.shown !== false ? [b.x, b.y, b.R + 4] : null;
     }
 
     _nextFact() {
@@ -1213,24 +1600,36 @@ class OrreryScene {
             const flying = this._trajectories.filter(tr => tr.segmentAt(jd) && tr.marker);
             const tr = flying[Math.floor(Math.random() * flying.length)];
             if (tr) {
-                const last = [...tr.events].reverse().find(ev => ev.t <= jd && ev.note);
+                const last = [...tr.milestones].reverse().find(ev => ev.t <= jd && ev.note);
                 const status = missionStatus(tr, jd);
                 subject = {tr};
                 color = tr.mission.color;
                 content = {
                     title: tr.mission.name,
                     subtitle: `${tr.mission.agency} · launched ${A.formatDate(tr.launch)}`,
-                    lines: [status, last ? `${A.formatMonth(last.t)}: ${last.note}` : null],
+                    lines: [status, last ? `${eventDate(last, true)}: ${last.note}` : null],
                 };
             }
         }
         if (!content) {
-            const ids = this._bodies.map(b => b.id);
-            this._factOrder = this._factOrder?.length ? this._factOrder
-                : ids.map(id => [Math.random(), id]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-            const id = this._factOrder.pop();
+            // Mostly the planets and the Sun; every fourth card, a moon, a
+            // comet, an asteroid on screen or a Lagrange point.
+            const extras = [
+                ...this._bodies.flatMap(b => b.moons.map(m => m.id)),
+                ...this._smalls.filter(x => x.shown).map(x => x.id),
+                ...this._lpoints.map(x => x.id),
+            ];
+            const pool = this._factCount % 4 === 1 && extras.length ? 'extras' : 'bodies';
+            this._factOrder ??= {};
+            if (!this._factOrder[pool]?.length) {
+                const ids = pool === 'extras' ? extras : this._bodies.map(b => b.id);
+                this._factOrder[pool] = ids.map(id => [Math.random(), id]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+            }
+            let id = this._factOrder[pool].pop();
+            if (!this._bodyById(id))
+                id = 'sun';
             subject = {id};
-            color = BODY[id].color;
+            color = placeColor(id);
             content = this._facts.card(id, jd);
         }
         this._factSubject = subject;
@@ -1239,7 +1638,7 @@ class OrreryScene {
             interactive: this._interactive(),
             onActivate: () => this._select(subject, {expand: true}),
         });
-        card.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
+        card.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
         this._factCard = card;
         this._showHighlight();
     }
@@ -1255,14 +1654,38 @@ class OrreryScene {
     }
 
     _subjectColor(subject) {
-        return subject.tr ? subject.tr.mission.color : BODY[subject.id].color;
+        return subject.tr ? subject.tr.mission.color : placeColor(subject.id);
     }
 
-    _details(subject, maxEvents = 8) {
+    _details(subject) {
+        if (subject.tr)
+            return missionDetails(subject.tr, this._jd);
         const sunlightView = this._settings.get_boolean('sunlight-view');
-        return subject.tr
-            ? missionDetails(subject.tr, this._jd, {maxEvents})
-            : bodyDetails(subject.id, this._jd, {sunlightView});
+        return details(subject.id, this._jd, {sunlightView, residents: this._residents(subject.id)});
+    }
+
+    // Missions staying at a place now, and those that stayed there before.
+    _residents(id) {
+        const now = [], past = [];
+        for (const tr of this._trajectories) {
+            const stays = tr.segments.filter(sg => sg.kind === 'stay' && sg.body === id);
+            if (stays.some(sg => this._jd >= sg.t0 && this._jd < Math.min(sg.t1, tr.end)))
+                now.push(tr.mission.id);
+            else if (stays.some(sg => sg.t0 <= this._jd))
+                past.push(tr.mission.id);
+        }
+        return {now, past};
+    }
+
+    // A link from a card: a place, or a spacecraft (if it is turned on).
+    _follow(link) {
+        if (link.mission) {
+            const tr = this._trajectories.find(x => x.mission.id === link.mission);
+            if (tr)
+                this._select({tr}, {expand: true});
+        } else if (this._bodyById(link.id)) {
+            this._select({id: link.id}, {expand: true});
+        }
     }
 
     // Pin a card for a subject; toggle: a second click on it lets go.
@@ -1283,15 +1706,14 @@ class OrreryScene {
         this._factCard = null;
         this._factSubject = null;
         this._selected = subject;
-        this._trim = null;
         this._pin = new Card(this._hud, this._details(subject), this._subjectColor(subject), this._cardWidth, {
             expanded: expand || wasExpanded,
             onClose: () => this._deselect(),
             onEvent: ev => this._seek(ev.t, true, ev),
-            onResize: () => this._fitPin(),
+            onLink: link => this._follow(link),
         });
-        this._pin.place(this._area.right - this._margin - this._cardWidth, this._area.top + this._margin);
-        this._fitPin();
+        this._pin.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
+        this._pin.setMaxHeight(this._slots.cardBottom - this._slots.cardTop);
         this._aim(this._pin, subject);
         this._showHighlight();
         this._updateHud();
@@ -1309,37 +1731,9 @@ class OrreryScene {
         this._updateHud();
     }
 
-    // Keep an expanded card clear of the event cards: drop trivia, then
-    // events, until it fits.
-    _fitPin() {
-        const pin = this._pin;
-        if (!pin || this._fitting)
-            return;
-        const avail = this._area.bottom - this._area.top - 2 * this._margin - 160;
-        if (!pin.expanded || pin.height <= avail)
-            return;
-        this._fitting = true;
-        const content = this._details(this._selected);
-        this._trim = {notes: content.notes?.length ?? 0, events: content.events?.length ?? 0};
-        while (pin.height > avail && (this._trim.notes > 0 || this._trim.events > 3)) {
-            if (this._trim.notes > 0)
-                this._trim.notes--;
-            else
-                this._trim.events--;
-            pin.update(this._trimmed(content));
-        }
-        this._fitting = false;
-    }
-
-    _trimmed(content) {
-        if (!this._trim)
-            return content;
-        return {...content, notes: content.notes?.slice(0, this._trim.notes), events: content.events && this._details(this._selected, this._trim.events).events};
-    }
-
     _refreshPin() {
         if (this._pin && this._selected)
-            this._pin.update(this._trimmed(this._details(this._selected)));
+            this._pin.update(this._details(this._selected));
     }
 
     // Path for the current subject: a brighter orbit, or the craft's whole
@@ -1361,11 +1755,49 @@ class OrreryScene {
                 R.strokePath(cr, past, rgb, strong ? 0.5 : 0.3, strong ? 1.6 : 1.2);
                 R.strokePath(cr, future, rgb, 0.22, 1, [3, 4]);
             });
-        } else if (subject.id !== 'sun' && (strong || this._settings.get_boolean('show-orbits'))) {
-            const pts = this._orbitPath(subject.id);
-            this._highlight.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, strong ? 0.7 : 0.5, strong ? 1.8 : 1.4));
+        } else if (this._orbitOf(subject.id) && (strong || this._settings.get_boolean('show-orbits'))) {
+            // A Lagrange point lights up its planet's orbit, faintly.
+            const id = this._orbitOf(subject.id), faint = id !== subject.id;
+            const pts = this._orbitPath(id);
+            this._highlight.update(pts, [this._W, this._H], cr =>
+                R.strokePath(cr, pts, rgb, (strong ? 0.7 : 0.5) * (faint ? 0.5 : 1), strong ? 1.8 : 1.4, faint ? [2, 4] : null));
         } else {
             this._highlight.hide();
+        }
+        this._syncMoonOrbits();
+    }
+
+    // Whose orbit to trace for a place: its own, its host planet's for a
+    // Lagrange point, none for moons and the Sun.
+    _orbitOf(id) {
+        if (LPOINT[id])
+            return id.startsWith('j') ? 'jupiter' : 'earth';
+        return id !== 'sun' && (BODY[id] || SMALL[id]) ? id : null;
+    }
+
+    // A planet's moon orbits (and names) show while it, or one of its moons,
+    // is picked or pointed at.
+    _syncMoonOrbits() {
+        const parentOf = s => s && !s.tr ? MOON[s.id]?.parent ?? s.id : null;
+        const featured = new Set([parentOf(this._subject()), parentOf(this._hover)]);
+        for (const b of this._bodies) {
+            if (!b.orbits)
+                continue;
+            const on = featured.has(b.id) && b.moons.length > 0;
+            if (b.orbits.visible !== on) {
+                b.orbits.visible = on;
+                if (on)
+                    b.orbits.queue_repaint();
+            }
+            for (const m of b.moons) {
+                if (on && !m.label) {
+                    m.label = label('orrery-moon-label', m.data.name.replace(/^The /, ''));
+                    this._labels.add_child(m.label);
+                } else if (!on && m.label) {
+                    m.label.destroy();
+                    m.label = null;
+                }
+            }
         }
     }
 
@@ -1447,6 +1879,22 @@ class OrreryScene {
         }
         if (best)
             return best;
+        // Moons, comets, asteroids and markers are small: a tight reach,
+        // checked before the planets they sit next to.
+        const points = [
+            ...this._bodies.flatMap(b => b.moons),
+            ...this._smalls.filter(sm => sm.shown),
+            ...this._lpoints,
+        ];
+        for (const pt of points) {
+            if (pt.x === undefined)
+                continue;
+            const d = Math.hypot(x - pt.x, y - pt.y);
+            if (d < Math.max(5, pt.R + 3) && d < bestD)
+                [best, bestD] = [{id: pt.id}, d];
+        }
+        if (best)
+            return best;
         for (const b of this._bodies) {
             const d = Math.hypot(x - b.x, y - b.y);
             const reach = Math.max(b.R + 5, 11);
@@ -1480,6 +1928,7 @@ class OrreryScene {
             labelOf(subject)?.add_style_class_name('orrery-label-hover');
             this.actor.set_cursor_type(subject && !fromList ? Clutter.CursorType.POINTER : Clutter.CursorType.DEFAULT);
             this._drawHover();
+            this._syncMoonOrbits();
             if (!fromList)
                 this._showTooltip(subject ? this._hoverText(subject) : null);
         }
@@ -1494,11 +1943,16 @@ class OrreryScene {
             const name = subject.tr.mission.short ?? subject.tr.mission.name;
             return p ? `${name} · ${A.norm(p).toFixed(A.norm(p) < 10 ? 2 : 0)} AU from the Sun` : name;
         }
-        if (subject.id === 'sun')
+        const id = subject.id;
+        if (id === 'sun')
             return 'The Sun';
-        const r = A.norm(A.planetPosition(subject.id, jd));
+        if (MOON[id])
+            return id === 'moon' ? 'The Moon' : `${MOON[id].name} · moon of ${BODY[MOON[id].parent].name}`;
+        if (LPOINT[id])
+            return `${LPOINT[id].name} · ${LPOINT[id].where}`;
+        const r = A.norm(A.bodyPosition(id, jd));
         const sunlight = this._settings.get_boolean('sunlight-view') ? ` · ${A.formatIrradiance(A.irradiance(r))}` : '';
-        return `${BODY[subject.id].name} · ${r.toFixed(2)} AU${sunlight}`;
+        return `${placeName(id)} · ${r.toFixed(2)} AU${sunlight}`;
     }
 
     _drawHover() {
@@ -1513,8 +1967,8 @@ class OrreryScene {
             if (h.tr.now && pts.length)
                 pts.push(h.tr.now);
             this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.35, 1.3));
-        } else if (h.id !== 'sun') {
-            const pts = this._orbitPath(h.id);
+        } else if (this._orbitOf(h.id)) {
+            const pts = this._orbitPath(this._orbitOf(h.id));
             this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.45, 1.4));
         } else {
             this._hoverPath.hide();
@@ -1557,7 +2011,8 @@ class OrreryScene {
         const w = this._tooltip.get_preferred_width(-1)[1];
         const [, ty] = this._timeline.actor.get_position();
         const x = h.x - this.actor.get_transformed_position()[0] - w / 2;
-        this._placeTooltip(x, ty - 30);
+        // Above the bar, or below it when the bar is at the top.
+        this._placeTooltip(x, this._timelineTop ? ty + this._timeline.actor.height + 8 : ty - 30);
     }
 
     onSettingChanged(key) {
@@ -1597,10 +2052,26 @@ class OrreryScene {
             this._layoutSunlight();
             this._syncTimelineState();
             this._updateAll(0);
-        } else if (key === 'days-per-second') {
+        } else if (key === 'days-per-second' || key === 'spin-planets') {
             this._syncTimelineState();
             this._updateHud();
         }
+    }
+
+    setMusicState(state) {
+        this.musicState = state;
+        this._syncTimelineState();
+    }
+
+    // In the overview the desktop (and the scene with it) is hidden while
+    // clones of it are shown, and hidden actors are not laid out. Lay out
+    // whatever changed by hand so the clones stay up to date.
+    syncHidden() {
+        if (this.actor.mapped || !this.actor.get_parent())
+            return;
+        const box = this.actor.get_allocation_box();
+        if (box.get_width() > 0)
+            this.actor.allocate(box);
     }
 }
 
@@ -1623,12 +2094,31 @@ export default class OrreryExtension extends Extension {
                 this._queueRelayout();
             else if (SCHEDULE_KEYS.includes(key))
                 this._schedule();
+            else if (MUSIC_KEYS.includes(key))
+                this._syncMusic();
+            else if (key === 'show-in-overview')
+                this._syncMirror();
             else
                 this._scene.onSettingChanged(key);
             if (key === 'spin-planets')
                 this._schedule();
         }, this);
         this._power = new PowerMonitor(() => this._schedule());
+
+        // The overview and workspace switches show clones of the scene
+        // instead of the plain wallpaper.
+        this._mirror = new SceneMirror(this._scene.actor);
+        this._syncMirror();
+        Main.overview.connectObject('showing', () => this._recheck(), 'hidden', () => this._recheck(), this);
+
+        this._music = new Music({
+            onError: message => {
+                this._settings.set_boolean('music-muted', true);
+                Main.notify('Orrery', `No music: ${message}`);
+            },
+        });
+        this._scene.onMusicToggle = () => this._settings.set_boolean('music-muted', !this._settings.get_boolean('music-muted'));
+        this._syncMusic();
 
         this._relayout();
         this._lastTick = GLib.get_monotonic_time();
@@ -1641,17 +2131,22 @@ export default class OrreryExtension extends Extension {
     disable() {
         if (this._timer)
             GLib.source_remove(this._timer);
-        for (const id of [this._relayoutId, this._raiseId]) {
+        for (const id of [this._relayoutId, this._raiseId, this._recheckId]) {
             if (id)
                 GLib.source_remove(id);
         }
-        this._timer = this._relayoutId = this._raiseId = 0;
+        this._timer = this._relayoutId = this._raiseId = this._recheckId = 0;
 
         if (this._scene && this._settings.get_string('mode') === 'replay')
             this._settings.set_double('replay-jd', Math.min(this._scene.jd, A.jdNow()));
         Main.layoutManager.disconnectObject(this);
         global.display.disconnectObject(this);
+        Main.overview.disconnectObject(this);
         this._settings.disconnectObject(this);
+        this._mirror?.disable();
+        this._mirror = null;
+        this._music?.destroy();
+        this._music = null;
         this._power?.destroy();
         this._power = null;
         this._scene?.destroy();
@@ -1689,6 +2184,45 @@ export default class OrreryExtension extends Extension {
         this._relayoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
             this._relayoutId = 0;
             this._relayout();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _syncMirror() {
+        if (this._settings.get_boolean('show-in-overview'))
+            this._mirror.enable();
+        else
+            this._mirror.disable();
+        this._recheck();
+    }
+
+    // Play when not muted, and (unless it should carry on regardless) while
+    // the desktop can be seen.
+    _syncMusic() {
+        if (!this._music)
+            return;
+        const s = this._settings;
+        this._music.setSource(s.get_string('music-source'), s.get_string('music-folder'));
+        this._music.setVolume(s.get_double('music-volume') / 100);
+        const locked = Main.sessionMode.isLocked || Main.screenShield?.locked;
+        const want = !s.get_boolean('music-muted') && !locked && (s.get_boolean('music-when-hidden') || !this._paused);
+        if (want)
+            this._music.play();
+        else
+            this._music.pause({release: s.get_boolean('music-muted')});
+        this._scene?.setMusicState(!s.get_boolean('music-button') ? 'hidden' : s.get_boolean('music-muted') ? 'muted' : 'playing');
+    }
+
+    // Look again at once (the overview opened or closed) rather than at the
+    // next once-a-second check.
+    _recheck() {
+        if (this._recheckId || !this._scene)
+            return;
+        // After the overview has finished changing state.
+        this._recheckId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._recheckId = 0;
+            if (this._check())
+                this._schedule();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -1744,35 +2278,48 @@ export default class OrreryExtension extends Extension {
         // About once a second: can anyone see the desktop, is anyone there,
         // and is anything moving?
         this._coveredClock += dt;
+        let again = GLib.SOURCE_CONTINUE;
         if (this._paused || this._coveredClock >= 1) {
             this._coveredClock = 0;
-            const s = this._settings;
-            const paused = s.get_boolean('pause-when-covered') && this._coverage() * 100 >= s.get_int('pause-coverage');
-            const minutes = s.get_int('idle-dim-minutes');
-            const idle = minutes > 0 && global.backend.get_core_idle_monitor().get_idletime() > minutes * 60000;
-            if (idle !== this._idle) {
-                this._idle = idle;
-                this._scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1);
-            }
-            this._paused = paused;
-            if (this._interval() !== this._intervalMs) {
+            if (this._check()) {
                 this._timer = 0;   // this source ends by returning REMOVE
                 this._schedule();
-                if (!this._paused)
-                    this._scene.tick(dt);
-                return GLib.SOURCE_REMOVE;
+                again = GLib.SOURCE_REMOVE;
             }
         }
-        if (!this._paused)
+        if (!this._paused) {
             this._scene.tick(dt);
-        return GLib.SOURCE_CONTINUE;
+            this._scene.syncHidden();
+        }
+        return again;
+    }
+
+    // Update pause and dim states; true if the frame rate should change.
+    _check() {
+        const s = this._settings;
+        const paused = s.get_boolean('pause-when-covered') && this._coverage() * 100 >= s.get_int('pause-coverage');
+        const minutes = s.get_int('idle-dim-minutes');
+        const idle = minutes > 0 && global.backend.get_core_idle_monitor().get_idletime() > minutes * 60000;
+        if (idle !== this._idle) {
+            this._idle = idle;
+            this._scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1);
+        }
+        if (paused !== this._paused) {
+            this._paused = paused;
+            this._syncMusic();
+        }
+        return this._interval() !== this._intervalMs;
     }
 
     // How much of the desktop windows hide, 0 to 1. Maximized and fullscreen
     // windows count as all of it; otherwise sample a grid over the monitor.
     _coverage() {
-        if (Main.overview.visible || Main.sessionMode.isLocked || Main.screenShield?.locked)
+        if (Main.sessionMode.isLocked || Main.screenShield?.locked)
             return 1;
+        // The overview shows the scene in its workspace cards and behind
+        // them, unless that is turned off.
+        if (Main.overview.visible)
+            return this._mirror?.enabled ? 0 : 1;
         const index = Main.layoutManager.primaryIndex;
         const area = Main.layoutManager.getWorkAreaForMonitor(index);
         const workspace = global.workspace_manager.get_active_workspace();
