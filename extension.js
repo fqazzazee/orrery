@@ -186,6 +186,9 @@ class OrreryScene {
         this._farDps = 3652.5;        // ten years a second when zoomed out
         this._focus = null;           // PlanetView of a planet up close
         this._focusMul = 1;
+        // Days the moons (and satellites, up close) have run on while the
+        // date was paused; they keep turning as long as the spin is on.
+        this._drift = 0;
         this.powerSaving = false;
         this.onActivity = null;
         this.musicState = 'hidden';   // for the timeline's music button
@@ -336,7 +339,7 @@ class OrreryScene {
     // Nothing moves: the extension can drop to a few frames per second.
     get still() {
         // (Up close everything turns with the clock, so stopping it is enough.)
-        return !this._timeRuns() && (!this._spinning() || !!this._focus) && !this._restarting &&
+        return !this._timeRuns() && !this._spinning() && !this._restarting &&
             Math.abs(this._zoomTarget - this._zoomOut) < 1e-4 && this._realTime - this._lastActivity > 3 && !this._eventCards.length;
     }
 
@@ -361,6 +364,7 @@ class OrreryScene {
             this._browsing = Math.abs(t - A.jdNow()) > 0.5;
         this._browseClock = 0;
         this._jd = t;
+        this._drift = 0;
         this._hold = 0;
         this._seekEvents();
         if (done) {
@@ -386,7 +390,9 @@ class OrreryScene {
         } else {
             this._playing = !this._playing;
             const end = this._intoFuture() ? this._endJd() : A.jdNow();
-            if (this._playing && !this._live() && this._jd >= end - 0.5 && this._jd <= end + 1)
+            // (At the end of the replay, play starts it over; not up close
+            // or zoomed out, where time runs on past today.)
+            if (this._playing && !this._live() && !this._focus && !this._isFar && this._jd >= end - 0.5 && this._jd <= end + 1)
                 this._seek(this._startJd());
         }
         this._browseClock = 0;
@@ -823,7 +829,7 @@ class OrreryScene {
             view: v => this._proj.view(v), area: this._area, W: this._W, H: this._H,
             trajectories: this._trajectories, showLabels: this._settings.get_boolean('show-labels'),
         });
-        view.update(this._jd);
+        view.update(this._jd + this._drift);
         return view;
     }
 
@@ -840,6 +846,7 @@ class OrreryScene {
         }
         const b = this._bodyById(id);
         const [px, py] = [b?.x ?? this._W / 2, b?.y ?? this._H / 2];
+        this._drift = 0;
         this._focus = this._makeFocus(id);
         this._focusMul = 1;
         if (this._live())
@@ -880,6 +887,7 @@ class OrreryScene {
             return;
         this._focus = null;
         this._focusMul = 1;
+        this._drift = 0;
         this._updateAll(0);
         const b = this._bodyById(leaving.id);
         const [px, py] = [b?.x ?? this._W / 2, b?.y ?? this._H / 2];
@@ -1091,7 +1099,8 @@ class OrreryScene {
         const dps = +s.get_double('days-per-second').toFixed(1);
         let caption;
         if (this._focus)
-            caption = `${BODY[this._focus.id].name} up close · ${this._speedText()} real speed${this._playing ? '' : ' · paused'}`;
+            caption = `${BODY[this._focus.id].name} up close · ${this._speedText()} real speed${this._playing ? ''
+                : this._spinning() ? ' · date paused, orbits still turning' : ' · paused'}`;
         else if (this._isFar)
             caption = `From beyond the planets · ${this._speedText()}${this._playing ? '' : ' · paused'}`;
         else if (live && !this._browsing)
@@ -1304,6 +1313,12 @@ class OrreryScene {
             return;
         this._realTime += dt;
         // Ease toward the zoom asked for.
+        // Paused, the orbits run on at the view's own pace (up close) or the
+        // spin clock (our Moon), while the date stands still.
+        if (!this._timeRuns() && this._spinning() && !this._restarting && !(this._live() && !this._browsing)) {
+            this._drift += dt * (this._focus ? this._dps()
+                : 1 / this._settings.get_double('seconds-per-earth-day'));
+        }
         const dz = this._zoomTarget - this._zoomOut;
         if (Math.abs(dz) > 1e-4) {
             this._zoomOut = Math.abs(dz) < 0.002 ? this._zoomTarget : this._zoomOut + dz * Math.min(1, dt * 5);
@@ -1323,7 +1338,7 @@ class OrreryScene {
             this._updateCraft();
         }
         if (this._focus) {
-            this._focus.update(this._jd);
+            this._focus.update(this._jd + this._drift);
             const featured = it => sameSubject(this._subject(), it.tr ? {tr: it.tr} : {id: it.id}) ||
                 sameSubject(this._hover, it.tr ? {tr: it.tr} : {id: it.id});
             this._focus.placeLabels(featured);
@@ -1425,7 +1440,7 @@ class OrreryScene {
                 // Our Moon sits where it really is: its phase sets its angle
                 // from the Sun as seen from Earth.
                 const sunLon = A.longitudeDeg(A.scale(b.pos, -1)) * Math.PI / 180;
-                a = sunLon + 2 * Math.PI * A.moonPhase(this._jd).age;
+                a = sunLon + 2 * Math.PI * A.moonPhase(this._jd + this._drift).age;
             } else {
                 a = m.phase0 + 2 * Math.PI * this._moonClock / (Math.abs(m.data.period) * spinDay) * Math.sign(m.data.period);
             }
