@@ -989,9 +989,11 @@ export default class OrreryExtension extends Extension {
     disable() {
         if (this._timer)
             GLib.source_remove(this._timer);
-        if (this._relayoutId)
-            GLib.source_remove(this._relayoutId);
-        this._timer = this._relayoutId = 0;
+        for (const id of [this._relayoutId, this._raiseId]) {
+            if (id)
+                GLib.source_remove(id);
+        }
+        this._timer = this._relayoutId = this._raiseId = 0;
 
         if (this._scene && this._settings.get_string('mode') === 'replay')
             this._settings.set_double('replay-jd', this._scene.jd);
@@ -1007,10 +1009,23 @@ export default class OrreryExtension extends Extension {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor || !this._scene)
             return;
-        const bgGroup = Main.layoutManager._backgroundGroup;
-        bgGroup.set_child_above_sibling(this._scene.actor, null);
+        this._raise();
         const workArea = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
         this._scene.relayout(monitor, workArea);
+    }
+
+    // Other desktop extensions (e.g. Depth Clock) also raise themselves in the
+    // background group when they start or monitors change; raise once they are
+    // done so the solar system stays on top.
+    _raise() {
+        if (this._raiseId)
+            return;
+        this._raiseId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            this._raiseId = 0;
+            if (this._scene)
+                Main.layoutManager._backgroundGroup.set_child_above_sibling(this._scene.actor, null);
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     // Slider drags fire many changes; rebuild once they settle.
