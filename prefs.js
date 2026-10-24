@@ -10,6 +10,14 @@ import {placeName} from './lib/bodies.js';
 export default class OrreryPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._settings = this.getSettings();
+        this._settingsIds = [];
+        window.connect('close-request', () => {
+            for (const id of this._settingsIds)
+                this._settings.disconnect(id);
+            this._settingsIds = null;
+            this._settings = null;
+            return false;
+        });
         window.set_default_size(640, 760);
         window.add(this._timePage());
         window.add(this._viewPage());
@@ -20,6 +28,11 @@ export default class OrreryPreferences extends ExtensionPreferences {
     }
 
     // ---- Row helpers ----
+
+    // Follow a setting until the window closes.
+    _watch(signal, callback) {
+        this._settingsIds.push(this._settings.connect(signal, callback));
+    }
 
     _switch(title, key, subtitle = '') {
         const row = new Adw.SwitchRow({title, subtitle});
@@ -44,7 +57,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
             row.selected = Math.max(0, i);
         };
         sync();
-        this._settings.connect(`changed::${key}`, sync);
+        this._watch(`changed::${key}`, sync);
         row.connect('notify::selected', () => {
             const value = choices[row.selected]?.[0];
             if (value && value !== this._settings.get_string(key))
@@ -193,7 +206,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
             idleBrightness.sensitive = this._settings.get_int('idle-dim-minutes') > 0;
         };
         syncIdle();
-        this._settings.connect('changed::idle-dim-minutes', syncIdle);
+        this._watch('changed::idle-dim-minutes', syncIdle);
         page.add(this._group('When you step away', [
             this._spin('Dim after', 'idle-dim-minutes', 0, 60, 1, 'Minutes without keyboard or mouse input; 0 never dims'),
             idleBrightness,
@@ -242,7 +255,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 row.active = !this._settings.get_strv('disabled-missions').includes(m.id);
             };
             sync();
-            this._settings.connect('changed::disabled-missions', sync);
+            this._watch('changed::disabled-missions', sync);
             row.connect('notify::active', () => {
                 const list = this._settings.get_strv('disabled-missions').filter(id => id !== m.id);
                 if (!row.active)
@@ -265,7 +278,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
             folderRow.subtitle = this._settings.get_string('music-folder') || 'None chosen';
         };
         syncFolder();
-        this._settings.connect('changed::music-folder', syncFolder);
+        this._watch('changed::music-folder', syncFolder);
         const choose = new Gtk.Button({label: 'Choose…', valign: Gtk.Align.CENTER});
         choose.connect('clicked', () => {
             const dialog = new Gtk.FileDialog({title: 'Music folder', modal: true});
@@ -289,7 +302,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
             folderRow.sensitive = this._settings.get_string('music-source') === 'folder';
         };
         syncSource();
-        this._settings.connect('changed::music-source', syncSource);
+        this._watch('changed::music-source', syncSource);
 
         const playing = new Adw.SwitchRow({title: 'Play music'});
         this._settings.bind('music-muted', playing, 'active', Gio.SettingsBindFlags.INVERT_BOOLEAN);

@@ -1,10 +1,13 @@
 Orrery, a live, OLED-black solar system as your wallpaper, ready for extensions.gnome.org.
 
-## What's new in 1.3.1
+## What's new in 1.3.2
 
-- Turning Orrery off now also frees its cached opposition and conjunction dates, as GNOME's extension review guidelines ask.
-- The extension's metadata links to this repository for bug reports, and to Buy me a coffee.
-- A [project page](https://fqazzazee.github.io/orrery/) with screenshots and recordings, and a README to match.
+Fixes from the extensions.gnome.org review:
+
+- On GNOME 49 and later, checking for maximized windows no longer touches `Meta.Window.get_maximized()`, which GNOME 49 removed.
+- Turning Orrery off now destroys every part of the scene and disconnects every signal one by one, instead of leaving them to their parents.
+- The preferences window disconnects from the settings when it closes.
+- The code names its modules in full (`Astro`, `Render`) instead of single letters, so it reads more easily.
 
 ## Install
 
@@ -12,9 +15,9 @@ Orrery, a live, OLED-black solar system as your wallpaper, ready for extensions.
 
 | Distribution | File | Command |
 |---|---|---|
-| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.1-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.1-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
-| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.1-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.1-1_all.deb` |
-| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.1-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.1-1-any.pkg.tar.zst` |
+| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.2-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.2-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
+| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.2-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.2-1_all.deb` |
+| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.2-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.2-1-any.pkg.tar.zst` |
 | Any distribution, just for you | `orrery@fqazzazee.github.io.shell-extension.zip` | `gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip` |
 
 **KDE Plasma, XFCE, Cinnamon, MATE, Budgie, LXQt, Sway, Hyprland and others** — install `orrery-wallpaper` (same three formats), then:
@@ -23,7 +26,7 @@ Orrery, a live, OLED-black solar system as your wallpaper, ready for extensions.
 - `systemctl --user enable --now orrery-wallpaper-live` instead runs an animated background on Wayland compositors with layer-shell (Sway, Hyprland, niri, labwc, river, Wayfire, COSMIC).
 - Or run `orrery-wallpaper render picture.png` for a single picture. `orrery-wallpaper --help` lists the options.
 
-`orrery-1.3.1.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
+`orrery-1.3.2.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
 
 ## What it does
 

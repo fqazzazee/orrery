@@ -9,7 +9,7 @@ import Cairo from 'cairo';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import * as A from '../lib/astro.js';
+import * as Astro from '../lib/astro.js';
 import {BODY} from '../lib/bodies.js';
 import {drawBackdrop, drawBodies, drawHud, drawTrails, makeView} from './scene.js';
 
@@ -45,10 +45,10 @@ export function runLive(opts, trajectories, sceneOpts) {
         win.set_child(area);
 
         const speed = opts.speed ?? 0;           // days per second; 0 is real time
-        const start = opts.date ? A.jdFromMs(Date.parse(opts.date)) : A.jdNow();
+        const start = opts.date ? Astro.jdFromMs(Date.parse(opts.date)) : Astro.jdNow();
         const t0 = GLib.get_monotonic_time();
         const now = () => (GLib.get_monotonic_time() - t0) / 1e6;
-        const jdAt = s => speed ? start + s * speed : A.jdNow();
+        const jdAt = s => speed ? start + s * speed : Astro.jdNow();
 
         let cache = null;   // {w, h, view, backdrop, trails, at}
         let hud = null;     // {surface, at}

@@ -12,7 +12,7 @@ import Cairo from 'cairo';
 import GLib from 'gi://GLib';
 import System from 'system';
 
-import * as A from '../lib/astro.js';
+import * as Astro from '../lib/astro.js';
 import {MISSIONS, buildTrajectories} from '../lib/missions.js';
 import {drawScene, makeView} from './scene.js';
 import {applyWallpaper, detectDesktop} from './setter.js';
@@ -87,7 +87,7 @@ async function screenSize() {
     return [3840, 2160];
 }
 
-const jdOf = opts => opts.date ? A.jdFromMs(Date.parse(opts.date.length === 10 ? `${opts.date}T12:00:00Z` : opts.date)) : A.jdNow();
+const jdOf = opts => opts.date ? Astro.jdFromMs(Date.parse(opts.date.length === 10 ? `${opts.date}T12:00:00Z` : opts.date)) : Astro.jdNow();
 
 function sceneOptions(opts) {
     return {
@@ -103,7 +103,7 @@ export function renderFile(file, [W, H], jd, opts, trajectories) {
     const k = Math.max(1, Math.min(W / 1920, H / 1080));
     cr.scale(k, k);
     const view = makeView(W / k, H / k, {tilt: opts.tilt, azimuth: opts.azimuth, scale: opts.scale, zoom: opts.zoom});
-    const date = opts.date ? `Showing ${A.formatDate(jd)}` : `The solar system on ${A.formatDate(jd)}, as it really is`;
+    const date = opts.date ? `Showing ${Astro.formatDate(jd)}` : `The solar system on ${Astro.formatDate(jd)}, as it really is`;
     drawScene(cr, view, jd, opts.missions === false ? [] : trajectories, {...sceneOptions(opts), caption: date});
     cr.$dispose();
     surface.writeToPNG(file);
@@ -144,7 +144,7 @@ async function main(argv) {
         const tick = () => {
             const file = cacheFile();
             try {
-                renderFile(file, size, A.jdNow(), opts, trajectories);
+                renderFile(file, size, Astro.jdNow(), opts, trajectories);
                 applyWallpaper(file);
             } catch (e) {
                 printerr(`orrery-wallpaper: ${e.message}`);

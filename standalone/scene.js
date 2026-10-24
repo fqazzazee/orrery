@@ -6,10 +6,10 @@
 import Pango from 'gi://Pango';
 import PangoCairo from 'gi://PangoCairo';
 
-import * as A from '../lib/astro.js';
+import * as Astro from '../lib/astro.js';
 import {BODY, PLANETS, moonsOf} from '../lib/bodies.js';
 import {FactDeck, missionStatus} from '../lib/facts.js';
-import * as R from '../lib/render.js';
+import * as Render from '../lib/render.js';
 
 const FONT = 'Outfit, Cantarell, Noto Sans, sans-serif';
 const deck = new FactDeck();
@@ -42,7 +42,7 @@ function text(cr, str, {x, y, size = 9, weight = 'normal', rgba = [1, 1, 1, 0.8]
 export function makeView(W, H, {tilt = 58, azimuth = 0, scale = 'sqrt', zoom = 1, planetScale = 1, top = 0, bottom = H} = {}) {
     const availH = bottom - top;
     const fitPx = Math.min(W * 0.46, availH * 0.46 / Math.max(0.2, Math.cos(tilt * Math.PI / 180))) * zoom;
-    const proj = new A.Projection({cx: W / 2, cy: top + availH / 2, fitPx, mode: scale, tilt, azimuth});
+    const proj = new Astro.Projection({cx: W / 2, cy: top + availH / 2, fitPx, mode: scale, tilt, azimuth});
     return {W, H, proj, unit: W / 220 * planetScale, top, bottom};
 }
 
@@ -54,25 +54,25 @@ export function drawBackdrop(cr, view, jd, {stars = true, belts = true, orbits =
     cr.setSourceRGB(0, 0, 0);
     cr.paint();
     if (stars)
-        R.drawStars(cr, W, H);
+        Render.drawStars(cr, W, H);
     if (belts) {
-        const rnd = R.seeded(4);
+        const rnd = Render.seeded(4);
         const belt = (n, a0, a1, alpha) => {
             const pts = [];
             for (let i = 0; i < n; i++) {
                 const a = a0 + (a1 - a0) * rnd() ** 0.8, th = rnd() * 2 * Math.PI;
                 pts.push([...proj.project([a * Math.cos(th), a * Math.sin(th), (rnd() - 0.5) * 0.12 * a]).slice(0, 2), 0.4 + rnd() * 0.6]);
             }
-            R.drawDots(cr, pts, alpha, 0.5);
+            Render.drawDots(cr, pts, alpha, 0.5);
         };
         belt(1600, 2.15, 3.3, 0.32);
         belt(900, 30, 48, 0.16);
     }
     if (orbits) {
         for (const b of PLANETS) {
-            const pts = A.orbitPoints(A.planetOrbit(b.id, jd)).map(p => proj.project(p));
+            const pts = Astro.orbitPoints(Astro.planetOrbit(b.id, jd)).map(p => proj.project(p));
             const minor = b.dwarf || b.asteroid;
-            R.strokePath(cr, pts, R.hexToRgb(b.color), minor ? 0.12 : 0.2, 1, minor ? [3, 4] : null);
+            Render.strokePath(cr, pts, Render.hexToRgb(b.color), minor ? 0.12 : 0.2, 1, minor ? [3, 4] : null);
         }
     }
 }
@@ -87,7 +87,7 @@ export function drawTrails(cr, view, jd, trajectories, years = 8) {
         const pts = tr.samples(Math.max(tr.launch, jd - window), Math.min(jd, tr.end))
             .map(({t, p}) => [...view.proj.project(p).slice(0, 2), 0.85 * (1 - (jd - t) / window) ** 1.4]);
         if (pts.length > 1)
-            R.strokeTrail(cr, pts, R.hexToRgb(tr.mission.color), width);
+            Render.strokeTrail(cr, pts, Render.hexToRgb(tr.mission.color), width);
     }
 }
 
@@ -101,46 +101,46 @@ export function drawBodies(cr, view, jd, trajectories, {labels = true, moons = t
         const size = Math.ceil(sunR * 7);
         cr.save();
         cr.translate(proj.cx - size / 2, proj.cy - size / 2);
-        R.drawSun(cr, size, sunR);
+        Render.drawSun(cr, size, sunR);
         cr.restore();
     }});
     const names = [];
-    const earth = A.planetPosition('earth', jd);
+    const earth = Astro.planetPosition('earth', jd);
     for (const b of PLANETS) {
-        const p = A.planetPosition(b.id, jd);
+        const p = Astro.planetPosition(b.id, jd);
         const [x, y, depth] = proj.project(p);
         const r = bodyRadius(view, b.id);
-        const size = 2 * R.spriteExtent(b.id, r);
-        const ecl = A.equatorialToEcliptic(...b.pole);
-        const pole = A.unit(proj.view(ecl));
-        const light = A.unit(proj.view(A.scale(p, -1)));
-        const phase = spinPhase ? spinPhase(b) : R.phaseFor(pole, A.unit(proj.view(A.primeMeridian(b.id, jd, b.pole))));
+        const size = 2 * Render.spriteExtent(b.id, r);
+        const ecl = Astro.equatorialToEcliptic(...b.pole);
+        const pole = Astro.unit(proj.view(ecl));
+        const light = Astro.unit(proj.view(Astro.scale(p, -1)));
+        const phase = spinPhase ? spinPhase(b) : Render.phaseFor(pole, Astro.unit(proj.view(Astro.primeMeridian(b.id, jd, b.pole))));
         items.push({depth, draw: () => {
             cr.save();
             cr.translate(x - size / 2, y - size / 2);
-            R.drawPlanet(cr, size, b.id, r, {pole, light, phase, atmosphere: b.atmosphere});
+            Render.drawPlanet(cr, size, b.id, r, {pole, light, phase, atmosphere: b.atmosphere});
             cr.restore();
         }});
         if (moons) {
             // Squeezed around the planet, as in the extension.
             const list = moonsOf(b.id);
-            const rings = R.RINGS[b.id];
+            const rings = Render.RINGS[b.id];
             const inner = (rings ? rings.at(-1)[1] * r : r) + 4;
             const span = Math.max(10, Math.min(34, r * 1.6));
             const logs = list.map(m => Math.log(m.a));
             const [lo, hi] = [Math.min(...logs), Math.max(...logs)];
-            const [e1, e2] = A.planeBasis(ecl);
+            const [e1, e2] = Astro.planeBasis(ecl);
             for (const m of list) {
-                const [b1, b2] = m.ecliptic ? A.planeBasis([0, 0, 1]) : [e1, e2];
+                const [b1, b2] = m.ecliptic ? Astro.planeBasis([0, 0, 1]) : [e1, e2];
                 const rr = list.length === 1 ? inner + span * 0.45 : inner + span * (Math.log(m.a) - lo) / (hi - lo);
-                const a = A.moonAngle(m, jd, earth);
-                const v = proj.view(A.add(A.scale(b1, Math.cos(a)), A.scale(b2, Math.sin(a))));
+                const a = Astro.moonAngle(m, jd, earth);
+                const v = proj.view(Astro.add(Astro.scale(b1, Math.cos(a)), Astro.scale(b2, Math.sin(a))));
                 const dot = Math.max(1.2, Math.min(2.8, unit * (m.radiusKm / 6371) ** 0.45 * 0.42));
                 const ms = Math.ceil(2 * dot + 1);
                 items.push({depth: depth + v[2] * rr, draw: () => {
                     cr.save();
                     cr.translate(x + v[0] * rr - ms / 2, y - v[1] * rr - ms / 2);
-                    R.drawMoon(cr, ms, R.hexToRgb(m.color), light);
+                    Render.drawMoon(cr, ms, Render.hexToRgb(m.color), light);
                     cr.restore();
                 }});
             }
@@ -161,7 +161,7 @@ export function drawBodies(cr, view, jd, trajectories, {labels = true, moons = t
             continue;
         let [x, y] = proj.project(seg.pos(jd));
         if (seg.kind === 'stay') {
-            const host = BODY[seg.body] ? proj.project(A.planetPosition(seg.body, jd)) : [x, y];
+            const host = BODY[seg.body] ? proj.project(Astro.planetPosition(seg.body, jd)) : [x, y];
             const ang = (tr.mission.id.length * 1.7) % (2 * Math.PI);
             [x, y] = [host[0] + 9 * Math.cos(ang), host[1] + 5 * Math.sin(ang)];
         }
@@ -169,7 +169,7 @@ export function drawBodies(cr, view, jd, trajectories, {labels = true, moons = t
             continue;
         cr.save();
         cr.translate(x - size / 2, y - size / 2);
-        R.drawCraft(cr, size, R.hexToRgb(tr.mission.color));
+        Render.drawCraft(cr, size, Render.hexToRgb(tr.mission.color));
         cr.restore();
         craft.push([tr, x, y]);
     }
@@ -189,7 +189,7 @@ export function drawBodies(cr, view, jd, trajectories, {labels = true, moons = t
         if (!fits(x + 7, y - 7, w, 11))
             continue;
         placed.push([x + 7, y - 7, x + 7 + w, y + 4]);
-        text(cr, name, {x: x + 7, y: y - 8, size: 7.5, weight: 'Semi-Bold', rgba: [...R.hexToRgb(tr.mission.color), 0.95]});
+        text(cr, name, {x: x + 7, y: y - 8, size: 7.5, weight: 'Semi-Bold', rgba: [...Render.hexToRgb(tr.mission.color), 0.95]});
     }
 }
 
@@ -198,7 +198,7 @@ export function drawHud(cr, view, jd, trajectories, {caption = 'Live · the sola
     const {W, H} = view;
     const m = Math.round(W * 0.018);
     const top = view.top + Math.round(m * 0.6);
-    text(cr, A.formatDate(jd), {x: m, y: top, size: 28, weight: 'Light', rgba: [0.88, 0.9, 0.96, 0.78]});
+    text(cr, Astro.formatDate(jd), {x: m, y: top, size: 28, weight: 'Light', rgba: [0.88, 0.9, 0.96, 0.78]});
     text(cr, caption, {x: m, y: top + 46, size: 9.5, rgba: [0.78, 0.81, 0.88, 0.5]});
 
     if (list) {
@@ -208,7 +208,7 @@ export function drawHud(cr, view, jd, trajectories, {caption = 'Live · the sola
         // Statuses in a column after the longest name.
         const col = Math.max(0, ...rows.map(([tr]) => textWidth(cr, tr.mission.short ?? tr.mission.name, {size: 9, weight: 'Bold'})));
         for (const [tr, status] of rows) {
-            const rgb = R.hexToRgb(tr.mission.color);
+            const rgb = Render.hexToRgb(tr.mission.color);
             cr.setSourceRGBA(...rgb, 1);
             cr.arc(m + 3, y + 8, 3, 0, 2 * Math.PI);
             cr.fill();
@@ -247,7 +247,7 @@ export function drawHud(cr, view, jd, trajectories, {caption = 'Live · the sola
         cr.setLineWidth(1);
         cr.stroke();
         let ty = y + pad - 2;
-        ty += text(cr, card.title, {x: x + pad, y: ty, size: 13, weight: 'Bold', rgba: [...R.hexToRgb(BODY[id].color), 1]});
+        ty += text(cr, card.title, {x: x + pad, y: ty, size: 13, weight: 'Bold', rgba: [...Render.hexToRgb(BODY[id].color), 1]});
         ty += text(cr, card.subtitle, {x: x + pad, y: ty, size: 8.5, rgba: [0.78, 0.81, 0.88, 0.55]}) + 4;
         for (const l of lines)
             ty += text(cr, l, {x: x + pad, y: ty, size: 10, rgba: [0.88, 0.9, 0.94, 0.82], width: w - 2 * pad}) + 5;

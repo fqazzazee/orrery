@@ -137,7 +137,7 @@ The Activities overview and workspace switches show the solar system, still movi
 
 ## Status
 
-Stable: [v1.3.1](https://github.com/fqazzazee/orrery/releases/tag/v1.3.1) is the latest release.
+Stable: [v1.3.2](https://github.com/fqazzazee/orrery/releases/tag/v1.3.2) is the latest release.
 
 - **GNOME:** tested in a real GNOME Shell on 48, 49, 50 and 51, each in a container, both from source and from the installed RPM and DEB packages.
 - **Other desktops:** the `orrery-wallpaper` companion's live background is tested in Sway, and its pictures render on Fedora, Debian and Arch.
@@ -148,7 +148,7 @@ Stable: [v1.3.1](https://github.com/fqazzazee/orrery/releases/tag/v1.3.1) is the
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
 ```bash
-v=1.3.1   # the release's version
+v=1.3.2   # the release's version
 url=https://github.com/fqazzazee/orrery/releases/download/v$v
 # Fedora, RHEL, openSUSE (zypper install works the same)
 sudo dnf install $url/gnome-shell-extension-orrery-$v-1.noarch.rpm
@@ -223,7 +223,7 @@ make dist                    # build the zip and the rpm, deb and Arch packages 
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
-To release, push a tag like `v1.3.1` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
+To release, push a tag like `v1.3.2` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
 
 The project page lives in [`docs/`](docs). Its screenshots and clips were recorded from the extension itself, running in a headless GNOME Shell.
 

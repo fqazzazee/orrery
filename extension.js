@@ -8,7 +8,7 @@ import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import * as A from './lib/astro.js';
+import * as Astro from './lib/astro.js';
 import {BODY, LAGRANGE, LPOINT, MOON, PLANETS, SMALL, SMALL_BODIES, SMALL_PLANETS, moonsOf, placeName} from './lib/bodies.js';
 import {SAT} from './lib/satellites.js';
 import {FactDeck, clearCache, details, eventCard, eventDate, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
@@ -18,7 +18,7 @@ import {SceneMirror} from './lib/mirror.js';
 import {MISSIONS, buildTrajectories} from './lib/missions.js';
 import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
-import * as R from './lib/render.js';
+import * as Render from './lib/render.js';
 import {Card, LayersPanel, Timeline, label} from './lib/ui.js';
 
 const RELAYOUT_KEYS = ['distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
@@ -34,14 +34,14 @@ const HUD_HZ = 2;
 const CONTROLS_SECONDS = 4;       // the timeline fades this long after the pointer stops
 const BROWSE_SECONDS = 120;       // live mode returns to today after this long untouched
 const FUTURE_DAYS = 2 * 365.25;   // the timeline reaches at least this far past today
-const LAST_JD = A.jd('2049-12-31');  // and never past the end of the planets' ephemeris
+const LAST_JD = Astro.jd('2049-12-31');  // and never past the end of the planets' ephemeris
 const SPEEDS = [0.5, 1, 2, 4, 8, 12, 20, 30, 60, 120, 240, 400];
 // Zooming out: the stops the buttons step through (0 is the planets, 1 the
 // nearest stars), and how far a wheel notch goes.
 const ZOOM_STOPS = [0, 0.22, 0.6, 1];
 const WHEEL_STEP = 0.06;
 const FAR_FROM = 0.3;                   // past this, time runs in years
-const FAR_END = A.jd('2500-01-01');     // how far the timeline reaches then
+const FAR_END = Astro.jd('2500-01-01');     // how far the timeline reaches then
 const FAR_SPEEDS = [36.525, 182.625, 365.25, 1826.25, 3652.5, 18262.5, 36525];   // days per second
 const FOCUS_RATES = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16];   // times the close-up's own pace
 const FOCUS_MS = 750;
@@ -91,11 +91,11 @@ class Sprite {
     constructor(parent, size, paint) {
         this.size = size;
         this.area = new St.DrawingArea({width: size, height: size});
-        this.area.connect('repaint', area => {
+        this.area.connectObject('repaint', area => {
             const cr = area.get_context();
             paint(cr, size);
             cr.$dispose();
-        });
+        }, this);
         parent.add_child(this.area);
     }
 
@@ -110,6 +110,7 @@ class Sprite {
 
     destroy() {
         this.area.destroy();
+        this.area = null;
     }
 }
 
@@ -121,12 +122,12 @@ class BoxCanvas {
         this.area = new St.DrawingArea({visible: false});
         this._paths = [];
         this._origin = [0, 0];
-        this.area.connect('repaint', area => {
+        this.area.connectObject('repaint', area => {
             const cr = area.get_context();
             cr.translate(-this._origin[0], -this._origin[1]);
             this._paint?.(cr);
             cr.$dispose();
-        });
+        }, this);
         parent.add_child(this.area);
     }
 
@@ -157,6 +158,12 @@ class BoxCanvas {
 
     hide() {
         this.area.hide();
+    }
+
+    destroy() {
+        this.area.destroy();
+        this.area = null;
+        this._paint = null;
     }
 }
 
@@ -202,7 +209,7 @@ class OrreryScene {
         this._system = new Clutter.Actor();
         this._content.add_child(this._system);
         this._backdrop = new St.DrawingArea();
-        this._backdrop.connect('repaint', area => this._paintBackdrop(area));
+        this._backdrop.connectObject('repaint', area => this._paintBackdrop(area), this);
         this._system.add_child(this._backdrop);
         this._far = new FarLayer(this._system);
         this._sunLayer = new Clutter.Actor();
@@ -236,7 +243,62 @@ class OrreryScene {
             c.card.destroy();
         this._timeline.destroy();
         this._panel.destroy();
+        this.actor.disconnectObject(this);
+
+        // Children before their parents: the HUD, the layers of the solar
+        // system, then the scene itself.
+        this._legendBar.destroy();
+        this._legend.destroy();
+        this._dateBox.destroy();
+        this._missionBox.destroy();
+        this._backButton.destroy();
+        this._hud.destroy();
+        this._far.destroy();
+        this._hoverPath.destroy();
+        this._highlight.destroy();
+        this._trojans.destroy();
+        this._trails.destroy();
+        this._backdrop.destroy();
+        this._sunLayer.destroy();
+        this._smallLayer.destroy();
+        this._world.destroy();
+        this._markerLayer.destroy();
+        this._craftLayer.destroy();
+        this._labels.destroy();
+        this._focusLayer.destroy();
+        this._system.destroy();
+        this._content.destroy();
         this.actor.destroy();
+
+        this._legendBar = null;
+        this._legend = null;
+        this._dateBox = null;
+        this._missionBox = null;
+        this._backButton = null;
+        this._hud = null;
+        this._far = null;
+        this._hoverPath = null;
+        this._highlight = null;
+        this._trojans = null;
+        this._trails = null;
+        this._backdrop = null;
+        this._sunLayer = null;
+        this._smallLayer = null;
+        this._world = null;
+        this._markerLayer = null;
+        this._craftLayer = null;
+        this._labels = null;
+        this._focusLayer = null;
+        this._system = null;
+        this._content = null;
+        this.actor = null;
+        this._focus = null;
+        this._missionRows = null;
+        this._timeline = null;
+        this._panel = null;
+        this._factCard = null;
+        this._pin = null;
+        this._eventCards = [];
     }
 
     get jd() {
@@ -250,7 +312,7 @@ class OrreryScene {
     }
 
     _startJd() {
-        return A.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
+        return Astro.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
     }
 
     // Far enough ahead to take in every planned mission event.
@@ -258,7 +320,7 @@ class OrreryScene {
         if (this._isFar)
             return FAR_END;
         const last = this._events?.length ? this._events.at(-1).t + 120 : 0;
-        return Math.min(LAST_JD, Math.max(A.jdNow() + FUTURE_DAYS, last));
+        return Math.min(LAST_JD, Math.max(Astro.jdNow() + FUTURE_DAYS, last));
     }
 
     _intoFuture() {
@@ -268,10 +330,10 @@ class OrreryScene {
     _resetTime() {
         const s = this._settings;
         if (this._live()) {
-            this._jd = A.jdNow();
+            this._jd = Astro.jdNow();
         } else {
             const saved = s.get_double('replay-jd');
-            this._jd = saved > this._startJd() && saved < A.jdNow() ? saved : this._startJd();
+            this._jd = saved > this._startJd() && saved < Astro.jdNow() ? saved : this._startJd();
         }
         this._browsing = false;
         this._hold = 0;
@@ -280,7 +342,7 @@ class OrreryScene {
 
     _advance(dt) {
         const s = this._settings;
-        const now = A.jdNow();
+        const now = Astro.jdNow();
         if (this._live() && !this._browsing) {
             this._jd = now;
             return;
@@ -331,7 +393,7 @@ class OrreryScene {
         if (this._live() && !this._browsing)
             return false;
         return this._playing && !this._timeline.dragging &&
-            this._jd < (this._jd > A.jdNow() + 1 || this._intoFuture() || this._isFar || this._focus ? this._endJd() : A.jdNow());
+            this._jd < (this._jd > Astro.jdNow() + 1 || this._intoFuture() || this._isFar || this._focus ? this._endJd() : Astro.jdNow());
     }
 
     _spinning() {
@@ -387,7 +449,7 @@ class OrreryScene {
         }
         t = Math.max(this._startJd(), Math.min(this._endJd(), t));
         if (this._live())
-            this._browsing = Math.abs(t - A.jdNow()) > 0.5;
+            this._browsing = Math.abs(t - Astro.jdNow()) > 0.5;
         this._browseClock = 0;
         this._jd = t;
         this._drift = 0;
@@ -405,7 +467,7 @@ class OrreryScene {
         this._browsing = false;
         this._browseClock = 0;
         this._playing = true;
-        this._seek(A.jdNow());
+        this._seek(Astro.jdNow());
     }
 
     _togglePlay() {
@@ -415,7 +477,7 @@ class OrreryScene {
             this._playing = false;
         } else {
             this._playing = !this._playing;
-            const end = this._intoFuture() ? this._endJd() : A.jdNow();
+            const end = this._intoFuture() ? this._endJd() : Astro.jdNow();
             // (At the end of the replay, play starts it over; not up close
             // or zoomed out, where time runs on past today.)
             if (this._playing && !this._live() && !this._focus && !this._isFar && this._jd >= end - 0.5 && this._jd <= end + 1)
@@ -478,7 +540,7 @@ class OrreryScene {
         const horizon = this._endJd() + 365.25;
         for (const tr of this._trajectories) {
             tr.cache = tr.samples(tr.launch, Math.min(tr.end, horizon));
-            tr.rgb = R.hexToRgb(tr.mission.color);
+            tr.rgb = Render.hexToRgb(tr.mission.color);
         }
         // Asteroids and comets that are only shown while a mission visits:
         // from its launch until a year after it leaves (or ends).
@@ -530,7 +592,7 @@ class OrreryScene {
             cx: W / 2, cy: top + availH / 2, fitPx,
             mode: s.get_string('distance-scale'), tilt, azimuth: s.get_double('azimuth'),
         };
-        this._proj = new A.Projection({...this._projParams, zoomOut: this._zoomOut});
+        this._proj = new Astro.Projection({...this._projParams, zoomOut: this._zoomOut});
         this._unit = W / 220 * s.get_double('planet-scale') / 100;
         this._orbitCache = new Map();
         this._trojansDrawn = null;
@@ -588,7 +650,7 @@ class OrreryScene {
 
         const sunR = this._bodyRadius('sun');
         const sunSize = Math.ceil(sunR * 7);
-        const sunSprite = new Sprite(this._world, sunSize, cr => R.drawSun(cr, sunSize, sunR));
+        const sunSprite = new Sprite(this._world, sunSize, cr => Render.drawSun(cr, sunSize, sunR));
         sunSprite.repaint();
         sunSprite.area.set_pivot_point(0.5, 0.5);
         this._sun = {id: 'sun', R: sunR, size: sunSize, actor: sunSprite.area, pos: [0, 0, 0], moons: [], orbits: null};
@@ -598,8 +660,8 @@ class OrreryScene {
             if (body.id === 'pluto' && !showPluto || SMALL_PLANETS.includes(body.id) && !showSmall)
                 continue;
             const r = this._bodyRadius(body.id);
-            const size = 2 * R.spriteExtent(body.id, r);
-            const pole = A.unit(this._proj.view(A.equatorialToEcliptic(...body.pole)));
+            const size = 2 * Render.spriteExtent(body.id, r);
+            const pole = Astro.unit(this._proj.view(Astro.equatorialToEcliptic(...body.pole)));
             const b = {id: body.id, R: r, size, pole, phase: 0, light: [1, 0, 0], drawn: null, shaded: null, cache: null};
 
             // Layers, so a spin only redraws the surface: rings behind,
@@ -621,17 +683,17 @@ class OrreryScene {
                 b.actor.add_child(area);
                 return area;
             };
-            if (R.RINGS[body.id])
-                layer(cr => R.drawRings(cr, size, body.id, r, pole, -1));
+            if (Render.RINGS[body.id])
+                layer(cr => Render.drawRings(cr, size, body.id, r, pole, -1));
             b.surface = layer((cr, area) => {
                 const scale = area.get_resource_scale();
                 if (b.cache?.scale !== scale)
-                    b.cache = R.bandCache(body.id, size, r, pole, scale);
-                R.drawSurface(cr, size, body.id, r, {pole, phase: b.phase, cache: b.cache});
+                    b.cache = Render.bandCache(body.id, size, r, pole, scale);
+                Render.drawSurface(cr, size, body.id, r, {pole, phase: b.phase, cache: b.cache});
             });
-            b.shade = layer(cr => R.drawShade(cr, size, r, b.light, body.atmosphere));
-            if (R.RINGS[body.id])
-                layer(cr => R.drawRings(cr, size, body.id, r, pole, +1));
+            b.shade = layer(cr => Render.drawShade(cr, size, r, b.light, body.atmosphere));
+            if (Render.RINGS[body.id])
+                layer(cr => Render.drawRings(cr, size, body.id, r, pole, +1));
             if (showLabels) {
                 b.label = label(SMALL_PLANETS.includes(body.id) ? 'orrery-planet-label orrery-small-label' : 'orrery-planet-label',
                     body.name.toUpperCase());
@@ -653,21 +715,21 @@ class OrreryScene {
         const list = this._settings.get_boolean('show-moons') ? moonsOf(b.id) : [];
         if (!list.length)
             return;
-        const rings = R.RINGS[b.id];
+        const rings = Render.RINGS[b.id];
         const inner = (rings ? rings.at(-1)[1] * b.R : b.R) + 4;
         const span = Math.max(10, Math.min(34, b.R * 1.6));
         const logs = list.map(m => Math.log(m.a));
         const [lo, hi] = [Math.min(...logs), Math.max(...logs)];
-        const planetPole = A.equatorialToEcliptic(...BODY[b.id].pole);
+        const planetPole = Astro.equatorialToEcliptic(...BODY[b.id].pole);
         let reach = 0;
         for (const m of list) {
             const pole = m.ecliptic ? [0, 0, 1] : planetPole;
-            const e1 = A.unit(Math.abs(pole[2]) > 0.99 ? A.cross(pole, [1, 0, 0]) : A.cross(pole, [0, 0, 1]));
-            const e2 = A.cross(pole, e1);
+            const e1 = Astro.unit(Math.abs(pole[2]) > 0.99 ? Astro.cross(pole, [1, 0, 0]) : Astro.cross(pole, [0, 0, 1]));
+            const e2 = Astro.cross(pole, e1);
             const r = list.length === 1 ? inner + span * 0.45 : inner + span * (Math.log(m.a) - lo) / (hi - lo);
             const dot = Math.max(1.2, Math.min(2.8, this._unit * (m.radiusKm / 6371) ** 0.45 * 0.42));
             const size = Math.ceil(2 * dot + 1);
-            const rgb = R.hexToRgb(m.color);
+            const rgb = Render.hexToRgb(m.color);
             const moon = {
                 id: m.id, data: m, r, size, R: dot, e1: this._proj.view(e1), e2: this._proj.view(e2),
                 phase0: 2 * Math.PI * hashUnit(m.id), front: true,
@@ -675,7 +737,7 @@ class OrreryScene {
             moon.area = new St.DrawingArea({width: size, height: size});
             moon.area.connect('repaint', area => {
                 const cr = area.get_context();
-                R.drawMoon(cr, size, rgb, b.light);
+                Render.drawMoon(cr, size, rgb, b.light);
                 cr.$dispose();
             });
             b.actor.add_child(moon.area);
@@ -692,7 +754,7 @@ class OrreryScene {
         }));
         b.orbits.connect('repaint', area => {
             const cr = area.get_context();
-            R.drawMoonOrbits(cr, 2 * M, rings2, 0.16);
+            Render.drawMoonOrbits(cr, 2 * M, rings2, 0.16);
             cr.$dispose();
         });
     }
@@ -703,13 +765,13 @@ class OrreryScene {
         const showLabels = this._settings.get_boolean('show-labels');
         for (const s of SMALL_BODIES) {
             const x = {id: s.id, data: s, R: 3, drawn: null, tail: [0, 0], shown: false};
-            const rgb = R.hexToRgb(s.color);
+            const rgb = Render.hexToRgb(s.color);
             if (s.comet) {
                 const size = Math.ceil(this._unit * 12);
-                x.sprite = new Sprite(this._smallLayer, size, cr => R.drawComet(cr, size, x.tail[0], x.tail[1], rgb));
+                x.sprite = new Sprite(this._smallLayer, size, cr => Render.drawComet(cr, size, x.tail[0], x.tail[1], rgb));
             } else {
                 const size = 9;
-                x.sprite = new Sprite(this._smallLayer, size, cr => R.drawSpeck(cr, size, rgb));
+                x.sprite = new Sprite(this._smallLayer, size, cr => Render.drawSpeck(cr, size, rgb));
                 x.sprite.repaint();
             }
             x.sprite.area.hide();
@@ -729,9 +791,9 @@ class OrreryScene {
             return;
         for (const l of LAGRANGE) {
             const size = 9;
-            const rgb = R.hexToRgb(placeColor(l.id));
+            const rgb = Render.hexToRgb(placeColor(l.id));
             const x = {id: l.id, data: l, R: 4};
-            x.sprite = new Sprite(this._markerLayer, size, cr => R.drawMarker(cr, size, rgb, l.id.startsWith('j') ? 0.45 : 0.6));
+            x.sprite = new Sprite(this._markerLayer, size, cr => Render.drawMarker(cr, size, rgb, l.id.startsWith('j') ? 0.45 : 0.6));
             x.sprite.repaint();
             x.label = label('orrery-marker-label', l.id.startsWith('j') ? l.id.slice(1).toUpperCase() : l.short);
             x.label.set_style(`color: rgba(${rgb.map(c => Math.round(c * 255)).join(', ')}, 0.55);`);
@@ -762,7 +824,7 @@ class OrreryScene {
         for (const tr of this._trajectories) {
             if (!show)
                 continue;
-            tr.marker = new Sprite(this._craftLayer, size, cr => R.drawCraft(cr, size, tr.rgb));
+            tr.marker = new Sprite(this._craftLayer, size, cr => Render.drawCraft(cr, size, tr.rgb));
             tr.marker.repaint();
             tr.label = label('orrery-craft-label', tr.mission.short ?? tr.mission.name);
             tr.label.set_style(`color: ${tr.mission.color};`);
@@ -784,7 +846,7 @@ class OrreryScene {
         // The camera rises as it pulls back, so things heading up out of
         // the plane of the planets (Voyager 1) are not seen end-on.
         const tilt = this._projParams.tilt;
-        this._proj = new A.Projection({...this._projParams, zoomOut: u, tilt: tilt + (Math.min(tilt, 25) - tilt) * smooth(u / 0.6)});
+        this._proj = new Astro.Projection({...this._projParams, zoomOut: u, tilt: tilt + (Math.min(tilt, 25) - tilt) * smooth(u / 0.6)});
         this._orbitCache = new Map();
         this._trojansDrawn = null;
         this._projectTrails();
@@ -805,7 +867,7 @@ class OrreryScene {
             this._isFar = far;
             // Coming back in from a far future, return to today.
             if (!far && this._jd > this._endJd())
-                this._seek(Math.min(this._jd, A.jdNow()));
+                this._seek(Math.min(this._jd, Astro.jdNow()));
             if (far && this._live())
                 this._browsing = true;
             this._timelineRange();
@@ -939,7 +1001,7 @@ class OrreryScene {
     // Simulated days per real second, for the view on screen.
     _dps() {
         if (this._focus)
-            return this._focus.rate * this._focusMul / A.DAY_S;
+            return this._focus.rate * this._focusMul / Astro.DAY_S;
         if (this._isFar)
             return this._farDps;
         return this._settings.get_double('days-per-second');
@@ -947,7 +1009,7 @@ class OrreryScene {
 
     _speedText() {
         if (this._focus)
-            return `×${A.formatCount(Math.round(this._focus.rate * this._focusMul))}`;
+            return `×${Astro.formatCount(Math.round(this._focus.rate * this._focusMul))}`;
         const dps = this._dps();
         if (dps >= 36.5)
             return `${+(dps / 365.25).toFixed(dps < 365.25 ? 1 : 0)} y/s`;
@@ -972,11 +1034,11 @@ class OrreryScene {
         this._legend.add_child(label('orrery-legend-title', 'Sunlight, W/m²'));
         const marks = [1, 10, 100, 1000, 10000];
         this._legendBar = new St.DrawingArea({width: 200, height: 9});
-        this._legendBar.connect('repaint', area => {
+        this._legendBar.connectObject('repaint', area => {
             const cr = area.get_context();
-            R.drawSunlightLegend(cr, ...area.get_surface_size(), marks);
+            Render.drawSunlightLegend(cr, ...area.get_surface_size(), marks);
             cr.$dispose();
-        });
+        }, this);
         this._legend.add_child(this._legendBar);
         const ticks = new Clutter.Actor({height: 12, width: 200});
         for (const [i, text] of ['1', '10', '100', '1k', '10k'].entries()) {
@@ -1007,10 +1069,10 @@ class OrreryScene {
             activity: () => this._activity(),
         });
 
-        this._timeline.actor.connect('enter-event', () => {
+        this._timeline.actor.connectObject('enter-event', () => {
             this._setHover(null);
             return Clutter.EVENT_PROPAGATE;
-        });
+        }, this);
 
         // Chips to show and hide things and missions, from the timeline.
         this._panel = new LayersPanel(this._hud, {
@@ -1026,13 +1088,13 @@ class OrreryScene {
         // Back out of a close-up or a zoom, from the top of the screen.
         this._backButton = new St.Button({style_class: 'orrery-pill orrery-back', label: '‹  Back to the solar system',
             can_focus: false, visible: false});
-        this._backButton.connect('clicked', () => {
+        this._backButton.connectObject('clicked', () => {
             if (this._focus)
                 this._leaveFocus();
             else
                 this._zoomTarget = 0;
             this._syncTimelineState();
-        });
+        }, this);
         this._hud.add_child(this._backButton);
 
         // One tooltip, shared by the scene and the timeline.
@@ -1118,12 +1180,12 @@ class OrreryScene {
     }
 
     _timelineRange() {
-        const t0 = this._startJd(), now = A.jdNow(), t1 = this._endJd();
-        const y0 = A.yearOfJd(t0), y1 = A.yearOfJd(t1);
+        const t0 = this._startJd(), now = Astro.jdNow(), t1 = this._endJd();
+        const y0 = Astro.yearOfJd(t0), y1 = Astro.yearOfJd(t1);
         const step = y1 - y0 > 300 ? 100 : y1 - y0 > 120 ? 25 : y1 - y0 > 40 ? 10 : 5;
         const years = [], labels = [];
         for (let y = y0; y <= y1; y++) {
-            const t = A.jd(`${y}-01-01`);
+            const t = Astro.jd(`${y}-01-01`);
             if (t < t0 || t > t1)
                 continue;
             if (y1 - y0 < 120 || y % step === 0)
@@ -1132,7 +1194,7 @@ class OrreryScene {
                 labels.push([t, `${y}`]);
         }
         const events = this._events.filter(ev => ev.kind !== 'note' && ev.kind !== 'point' || ev.title)
-            .map(ev => ({t: ev.t, kind: ev.kind, ev, rgb: R.hexToRgb(ev.mission.color)}));
+            .map(ev => ({t: ev.t, kind: ev.kind, ev, rgb: Render.hexToRgb(ev.mission.color)}));
         this._timeline.setRange({t0, t1, now, years, labels, events});
     }
 
@@ -1156,11 +1218,11 @@ class OrreryScene {
         const s = this._settings;
         const live = this._live();
         // Up close, time runs in minutes and hours.
-        const clock = new Date(A.msFromJd(this._jd));
+        const clock = new Date(Astro.msFromJd(this._jd));
         this._dateLabel.text = this._focus
-            ? `${A.formatDate(this._jd)}  ${String(clock.getUTCHours()).padStart(2, '0')}:${String(clock.getUTCMinutes()).padStart(2, '0')} UTC`
-            : A.formatDate(this._jd);
-        const now = A.jdNow();
+            ? `${Astro.formatDate(this._jd)}  ${String(clock.getUTCHours()).padStart(2, '0')}:${String(clock.getUTCMinutes()).padStart(2, '0')} UTC`
+            : Astro.formatDate(this._jd);
+        const now = Astro.jdNow();
         const today = Math.abs(this._jd - now) < 0.5;
         const dps = +s.get_double('days-per-second').toFixed(1);
         let caption;
@@ -1243,8 +1305,10 @@ class OrreryScene {
                 // Each row is a button that picks its mission.
                 row.box = new St.Button({style_class: 'orrery-mission-button', child: inner, can_focus: false,
                     reactive: interactive, x_align: Clutter.ActorAlign.START});
-                row.box.connect('clicked', () => this._select({tr}, {toggle: true}));
-                row.box.connect('notify::hover', () => this._setHover(row.box.hover ? {tr} : null, {fromList: true}));
+                row.box.connectObject(
+                    'clicked', () => this._select({tr}, {toggle: true}),
+                    'notify::hover', () => this._setHover(row.box.hover ? {tr} : null, {fromList: true}),
+                    this);
                 this._missionBox.add_child(row.box);
                 this._missionRows.set(tr.mission.id, row);
             }
@@ -1273,7 +1337,7 @@ class OrreryScene {
             if (!b.label || !b.pos)
                 continue;
             const name = BODY[b.id].name.toUpperCase();
-            const text = sunlight ? `${name}  ${A.formatIrradiance(A.irradiance(A.norm(b.pos)))}` : name;
+            const text = sunlight ? `${name}  ${Astro.formatIrradiance(Astro.irradiance(Astro.norm(b.pos)))}` : name;
             if (b.label.text !== text)
                 b.label.text = text;
         }
@@ -1294,14 +1358,14 @@ class OrreryScene {
         // Contour labels along a ray to the upper right, outermost (highest
         // on screen) first, so the inner ones give way when crowded.
         for (const e of [...SUN_LEVELS].reverse()) {
-            const rho = this._proj.radiusPx(A.irradianceRadius(e));
+            const rho = this._proj.radiusPx(Astro.irradianceRadius(e));
             const x = cx + rho * Math.cos(ang) + 4, y = cy + rho * squash * Math.sin(ang) - 14;
             if (rho < this._sun.R * 2.2 || x < left || y < top + 40 || y - lastY < 15)
                 continue;
-            const text = e === A.SOLAR_CONSTANT ? `${A.formatIrradiance(e)} · Earth` : A.formatIrradiance(e);
+            const text = e === Astro.SOLAR_CONSTANT ? `${Astro.formatIrradiance(e)} · Earth` : Astro.formatIrradiance(e);
             const l = label('orrery-sun-contour', text);
             // The contour's color, lifted toward white so the dim outer ones read.
-            const [r, g, b] = R.sunlightColor(e).map(c => Math.round(255 * (0.65 * c + 0.35)));
+            const [r, g, b] = Render.sunlightColor(e).map(c => Math.round(255 * (0.65 * c + 0.35)));
             l.set_style(`color: rgba(${r}, ${g}, ${b}, 0.75);`);
             this._sunLayer.add_child(l);
             if (x + l.get_preferred_width(-1)[1] > right) {
@@ -1312,7 +1376,7 @@ class OrreryScene {
             lastY = y;
         }
         // The habitable zone, named below the Sun.
-        const [zIn, zOut] = A.HABITABLE_ZONE.map(r => this._proj.radiusPx(r));
+        const [zIn, zOut] = Astro.HABITABLE_ZONE.map(r => this._proj.radiusPx(r));
         const zone = label('orrery-sun-zone', 'Habitable zone');
         this._sunLayer.add_child(zone);
         const zw = zone.get_preferred_width(-1)[1];
@@ -1331,22 +1395,22 @@ class OrreryScene {
         const s = this._settings;
         const sunlight = s.get_boolean('sunlight-view');
         if (s.get_boolean('show-stars') && !sunlight)
-            R.drawStars(cr, this._W, this._H);
+            Render.drawStars(cr, this._W, this._H);
         if (sunlight) {
-            R.drawSunlightField(cr, {
+            Render.drawSunlightField(cr, {
                 cx: this._proj.cx, cy: this._proj.cy, squash: this._proj.squash,
-                radiusPx: r => this._proj.radiusPx(r), levels: SUN_LEVELS, zone: A.HABITABLE_ZONE,
+                radiusPx: r => this._proj.radiusPx(r), levels: SUN_LEVELS, zone: Astro.HABITABLE_ZONE,
             });
         }
         if (s.get_boolean('show-belts')) {
-            const rnd = R.seeded(4);
+            const rnd = Render.seeded(4);
             const belt = (n, a0, a1, alpha) => {
                 const pts = [];
                 for (let i = 0; i < n; i++) {
                     const a = a0 + (a1 - a0) * rnd() ** 0.8, th = rnd() * 2 * Math.PI;
                     pts.push([...this._proj.project([a * Math.cos(th), a * Math.sin(th), (rnd() - 0.5) * 0.12 * a]).slice(0, 2), 0.4 + rnd() * 0.6]);
                 }
-                R.drawDots(cr, pts, alpha, 0.5);
+                Render.drawDots(cr, pts, alpha, 0.5);
             };
             belt(1600, 2.15, 3.3, sunlight ? 0.2 : 0.32);
             belt(900, 30, 48, sunlight ? 0.1 : 0.16);
@@ -1355,7 +1419,7 @@ class OrreryScene {
             for (const b of this._bodies.slice(1)) {
                 const pts = this._orbitPath(b.id);
                 const minor = SMALL_PLANETS.includes(b.id);
-                R.strokePath(cr, pts, R.hexToRgb(BODY[b.id].color), b.id === 'pluto' ? 0.13 : minor ? 0.1 : 0.2, 1,
+                Render.strokePath(cr, pts, Render.hexToRgb(BODY[b.id].color), b.id === 'pluto' ? 0.13 : minor ? 0.1 : 0.2, 1,
                     b.id === 'pluto' || minor ? [3, 4] : null);
             }
         }
@@ -1367,7 +1431,7 @@ class OrreryScene {
         const hit = this._orbitCache.get(id);
         if (hit && Math.abs(hit.jd - this._jd) < 3650)
             return hit.pts;
-        const pts = A.orbitPoints(A.planetOrbit(id, this._jd)).map(p => this._proj.project(p));
+        const pts = Astro.orbitPoints(Astro.planetOrbit(id, this._jd)).map(p => this._proj.project(p));
         this._orbitCache.set(id, {jd: this._jd, pts});
         return pts;
     }
@@ -1445,7 +1509,7 @@ class OrreryScene {
         const spinning = this._spinning();
         const order = [];
         for (const b of this._bodies) {
-            const p = b.id === 'sun' ? [0, 0, 0] : A.planetPosition(b.id, this._jd);
+            const p = b.id === 'sun' ? [0, 0, 0] : Astro.planetPosition(b.id, this._jd);
             b.pos = p;
             const [x, y, depth] = this._proj.project(p);
             b.x = x;
@@ -1466,14 +1530,14 @@ class OrreryScene {
                 const hours = BODY[b.id].rotationHours;
                 b.phase = wrapAngle(2 * Math.PI * this._realTime / (Math.abs(hours) / 23.9345 * spinDay) * Math.sign(hours));
             }
-            b.light = A.unit(this._proj.view(A.scale(p, -1)));
+            b.light = Astro.unit(this._proj.view(Astro.scale(p, -1)));
             // Redraw only when something moved by most of a pixel, at most 20 times a second.
             if (b.drawn === null || (Math.abs(wrapAngle(b.phase - b.drawn.phase)) * b.R > 0.8 &&
                 this._realTime - b.drawn.at > 0.05)) {
                 b.drawn = {phase: b.phase, at: this._realTime};
                 b.surface.queue_repaint();
             }
-            if (!b.shaded || b.R * Math.sqrt(Math.max(0, 2 * (1 - A.dot(b.light, b.shaded)))) > 0.6) {
+            if (!b.shaded || b.R * Math.sqrt(Math.max(0, 2 * (1 - Astro.dot(b.light, b.shaded)))) > 0.6) {
                 b.shaded = b.light;
                 b.shade.queue_repaint();
                 for (const m of b.moons)
@@ -1505,8 +1569,8 @@ class OrreryScene {
             if (m.id === 'moon') {
                 // Our Moon sits where it really is: its phase sets its angle
                 // from the Sun as seen from Earth.
-                const sunLon = A.longitudeDeg(A.scale(b.pos, -1)) * Math.PI / 180;
-                a = sunLon + 2 * Math.PI * A.moonPhase(this._jd + this._drift).age;
+                const sunLon = Astro.longitudeDeg(Astro.scale(b.pos, -1)) * Math.PI / 180;
+                a = sunLon + 2 * Math.PI * Astro.moonPhase(this._jd + this._drift).age;
             } else {
                 a = m.phase0 + 2 * Math.PI * this._moonClock / (Math.abs(m.data.period) * spinDay) * Math.sign(m.data.period);
             }
@@ -1539,7 +1603,7 @@ class OrreryScene {
         if (s.show === 'far')
             return this._settings.get_boolean('show-small-bodies') && this._zoomOut > 0.05;
         if (Array.isArray(s.show))
-            return this._settings.get_boolean('show-small-bodies') && jd > A.jd(s.show[0]) && jd < A.jd(s.show[1]);
+            return this._settings.get_boolean('show-small-bodies') && jd > Astro.jd(s.show[0]) && jd < Astro.jd(s.show[1]);
         return this._settings.get_boolean('show-missions') &&
             (this._smallWindows.get(x.id) ?? []).some(([t0, t1]) => jd > t0 && jd < t1);
     }
@@ -1558,14 +1622,14 @@ class OrreryScene {
                 x.label?.hide();
                 continue;
             }
-            const p = A.bodyPosition(x.id, this._jd);
+            const p = Astro.bodyPosition(x.id, this._jd);
             const [px, py] = this._proj.project(p);
             x.pos = p;
             x.x = px;
             x.y = py;
             x.sprite.moveTo(px, py);
             if (x.data.comet) {
-                const r = A.norm(p);
+                const r = Astro.norm(p);
                 const angle = Math.atan2(py - sy, px - sx);
                 const len = r < 4 ? this._unit * 5 * (4 - r) / 3 : 0;
                 const d = x.drawn;
@@ -1607,7 +1671,7 @@ class OrreryScene {
                 const s = x.id === 'l1' ? k : -k;
                 [x.x, x.y] = [earth.x + dx / n * s, earth.y + dy / n * s];
             } else {
-                [x.x, x.y] = this._proj.project(A.bodyPosition(x.id, this._jd));
+                [x.x, x.y] = this._proj.project(Astro.bodyPosition(x.id, this._jd));
             }
             x.sprite.moveTo(x.x, x.y);
             if (x.label) {
@@ -1631,19 +1695,19 @@ class OrreryScene {
             return;
         this._trojansDrawn = [jup.x, jup.y];
         if (!this._trojanCloud) {
-            const rnd = R.seeded(1772);
+            const rnd = Render.seeded(1772);
             const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 0.5;
             this._trojanCloud = Array.from({length: 520}, (_, i) =>
                 [(i % 2 ? 60 : -60) + gauss() * 11, 1 + gauss() * 0.035, gauss() * 0.12, 0.35 + rnd() * 0.65]);
         }
-        const o = A.planetOrbit('jupiter', this._jd);
-        const n = A.unit(A.cross(o.p, o.q));
+        const o = Astro.planetOrbit('jupiter', this._jd);
+        const n = Astro.unit(Astro.cross(o.p, o.q));
         const p = jup.pos;
         const pts = this._trojanCloud.map(([dl, dr, dz, a]) => {
-            const q = A.add(A.scale(A.rotateAbout(p, n, dl), dr), A.scale(n, dz * A.norm(p)));
+            const q = Astro.add(Astro.scale(Astro.rotateAbout(p, n, dl), dr), Astro.scale(n, dz * Astro.norm(p)));
             return [...this._proj.project(q).slice(0, 2), a];
         });
-        this._trojans.update(pts, [this._W, this._H], cr => R.drawDots(cr, pts, 0.28, 0.55));
+        this._trojans.update(pts, [this._W, this._H], cr => Render.drawDots(cr, pts, 0.28, 0.55));
     }
 
     _bodyById(id) {
@@ -1705,11 +1769,11 @@ class OrreryScene {
             if (tr.label.visible) {
                 // Far craft can project near the Sun when they climb out of
                 // the ecliptic toward or away from the camera; say how far.
-                const r = A.norm(seg.pos(this._jd));
+                const r = Astro.norm(seg.pos(this._jd));
                 const name = tr.mission.short ?? tr.mission.name;
                 let text = r > 40 && seg.kind !== 'stay' ? `${name} · ${r.toFixed(0)} AU` : name;
                 if (sunlight)
-                    text += ` · ${A.formatRatio(A.irradiance(r) / A.SOLAR_CONSTANT)} sun`;
+                    text += ` · ${Astro.formatRatio(Astro.irradiance(r) / Astro.SOLAR_CONSTANT)} sun`;
                 if (tr.label.text !== text)
                     tr.label.text = text;
                 tr.label.set_translation(Math.round(x + 7), Math.round(y - 7), 0);
@@ -1717,7 +1781,7 @@ class OrreryScene {
 
             tr.edge.visible = !onScreen;
             if (!onScreen) {
-                const r = A.norm(seg.pos(this._jd));
+                const r = Astro.norm(seg.pos(this._jd));
                 const [cx, cy] = [this._proj.cx, this._proj.cy];
                 const ang = Math.atan2(y - cy, x - cx);
                 const arrow = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'][((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8];
@@ -1782,7 +1846,7 @@ class OrreryScene {
         const b = ev?.at && this._bodyById(ev.at);
         if (b)
             return [b.x, b.y];
-        return ev ? this._proj.project(ev.via ?? A.bodyPosition(ev.at ?? 'earth', ev.t)).slice(0, 2) : [0, 0];
+        return ev ? this._proj.project(ev.via ?? Astro.bodyPosition(ev.at ?? 'earth', ev.t)).slice(0, 2) : [0, 0];
     }
 
     _updateTrails() {
@@ -1837,8 +1901,8 @@ class OrreryScene {
         const width = Math.max(1, this._unit * 0.17);
         this._trails.update(all, [this._W, this._H], cr => {
             for (const {pts, ahead, rgb} of draws) {
-                R.strokePath(cr, ahead, rgb, 0.16, 1, [2, 4]);
-                R.strokeTrail(cr, pts, rgb, width);
+                Render.strokePath(cr, ahead, rgb, 0.16, 1, [2, 4]);
+                Render.strokeTrail(cr, pts, rgb, width);
             }
         });
     }
@@ -1984,7 +2048,7 @@ class OrreryScene {
                 color = tr.mission.color;
                 content = {
                     title: tr.mission.name,
-                    subtitle: `${tr.mission.agency} · launched ${A.formatDate(tr.launch)}`,
+                    subtitle: `${tr.mission.agency} · launched ${Astro.formatDate(tr.launch)}`,
                     lines: [status, last ? `${eventDate(last, true)}: ${last.note}` : null],
                 };
             }
@@ -2125,7 +2189,7 @@ class OrreryScene {
             this._highlight.hide();
             return;
         }
-        const rgb = R.hexToRgb(this._subjectColor(subject));
+        const rgb = Render.hexToRgb(this._subjectColor(subject));
         const strong = !!this._selected;
         if (subject.tr) {
             const past = subject.tr.projected.filter(([, , t]) => t <= this._jd);
@@ -2133,15 +2197,15 @@ class OrreryScene {
             if (subject.tr.now && past.length)
                 past.push(subject.tr.now);
             this._highlight.update([...past, ...future], [this._W, this._H], cr => {
-                R.strokePath(cr, past, rgb, strong ? 0.5 : 0.3, strong ? 1.6 : 1.2);
-                R.strokePath(cr, future, rgb, 0.22, 1, [3, 4]);
+                Render.strokePath(cr, past, rgb, strong ? 0.5 : 0.3, strong ? 1.6 : 1.2);
+                Render.strokePath(cr, future, rgb, 0.22, 1, [3, 4]);
             });
         } else if (this._orbitOf(subject.id) && (strong || this._settings.get_boolean('show-orbits'))) {
             // A Lagrange point lights up its planet's orbit, faintly.
             const id = this._orbitOf(subject.id), faint = id !== subject.id;
             const pts = this._orbitPath(id);
             this._highlight.update(pts, [this._W, this._H], cr =>
-                R.strokePath(cr, pts, rgb, (strong ? 0.7 : 0.5) * (faint ? 0.5 : 1), strong ? 1.8 : 1.4, faint ? [2, 4] : null));
+                Render.strokePath(cr, pts, rgb, (strong ? 0.7 : 0.5) * (faint ? 0.5 : 1), strong ? 1.8 : 1.4, faint ? [2, 4] : null));
         } else {
             this._highlight.hide();
         }
@@ -2185,7 +2249,7 @@ class OrreryScene {
     // ---- Pointer ----
 
     _connectInput() {
-        this.actor.connect('motion-event', (_a, event) => {
+        this.actor.connectObject('motion-event', (_a, event) => {
             const [sx, sy] = event.get_coords();
             const [, x, y] = this.actor.transform_stage_point(sx, sy);
             this._activity();
@@ -2193,22 +2257,22 @@ class OrreryScene {
             const onScene = global.stage.get_event_actor(event) === this.actor;
             this._setHover(onScene ? this._hitTest(x, y) : null, {x, y});
             return Clutter.EVENT_PROPAGATE;
-        });
-        this.actor.connect('leave-event', () => {
+        }, this);
+        this.actor.connectObject('leave-event', () => {
             this._setHover(null);
             return Clutter.EVENT_PROPAGATE;
-        });
+        }, this);
         // Clicks that land on a card or a button are theirs; let them be.
         const own = event => global.stage.get_event_actor(event) === this.actor;
-        this.actor.connect('button-press-event', (_a, event) => {
+        this.actor.connectObject('button-press-event', (_a, event) => {
             if (!own(event))
                 return Clutter.EVENT_PROPAGATE;
             this._press = event.get_coords();
             if (event.get_button() === Clutter.BUTTON_SECONDARY)
                 this._openBackgroundMenu(...this._press);
             return Clutter.EVENT_STOP;
-        });
-        this.actor.connect('button-release-event', (_a, event) => {
+        }, this);
+        this.actor.connectObject('button-release-event', (_a, event) => {
             if (!own(event))
                 return Clutter.EVENT_PROPAGATE;
             const [sx, sy] = event.get_coords();
@@ -2233,9 +2297,9 @@ class OrreryScene {
                 this._deselect();
             }
             return Clutter.EVENT_STOP;
-        });
+        }, this);
         // The wheel zooms: out toward the stars, in to a planet.
-        this.actor.connect('scroll-event', (_a, event) => {
+        this.actor.connectObject('scroll-event', (_a, event) => {
             if (!own(event) || !this._interactive())
                 return Clutter.EVENT_PROPAGATE;
             const dir = event.get_scroll_direction();
@@ -2258,7 +2322,7 @@ class OrreryScene {
             this._wheelSum = 0;
             this._activity();
             return Clutter.EVENT_STOP;
-        });
+        }, this);
     }
 
     // We cover the wallpaper, so pass right clicks on to its menu.
@@ -2359,7 +2423,7 @@ class OrreryScene {
         if (subject.tr) {
             const p = subject.tr.position(jd);
             const name = subject.tr.mission.short ?? subject.tr.mission.name;
-            return p ? `${name} · ${A.norm(p).toFixed(A.norm(p) < 10 ? 2 : 0)} AU from the Sun` : name;
+            return p ? `${name} · ${Astro.norm(p).toFixed(Astro.norm(p) < 10 ? 2 : 0)} AU from the Sun` : name;
         }
         const id = subject.id;
         if (id === 'sun')
@@ -2370,8 +2434,8 @@ class OrreryScene {
             return id === 'moon' ? 'The Moon' : `${MOON[id].name} · moon of ${BODY[MOON[id].parent].name}`;
         if (LPOINT[id])
             return `${LPOINT[id].name} · ${LPOINT[id].where}`;
-        const r = A.norm(A.bodyPosition(id, jd));
-        const sunlight = this._settings.get_boolean('sunlight-view') ? ` · ${A.formatIrradiance(A.irradiance(r))}` : '';
+        const r = Astro.norm(Astro.bodyPosition(id, jd));
+        const sunlight = this._settings.get_boolean('sunlight-view') ? ` · ${Astro.formatIrradiance(Astro.irradiance(r))}` : '';
         return `${placeName(id)} · ${r.toFixed(2)} AU${sunlight}`;
     }
 
@@ -2381,15 +2445,15 @@ class OrreryScene {
             this._hoverPath.hide();
             return;
         }
-        const rgb = R.hexToRgb(this._subjectColor(h));
+        const rgb = Render.hexToRgb(this._subjectColor(h));
         if (h.tr) {
             const pts = h.tr.projected.filter(([, , t]) => t <= this._jd);
             if (h.tr.now && pts.length)
                 pts.push(h.tr.now);
-            this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.35, 1.3));
+            this._hoverPath.update(pts, [this._W, this._H], cr => Render.strokePath(cr, pts, rgb, 0.35, 1.3));
         } else if (this._orbitOf(h.id)) {
             const pts = this._orbitPath(this._orbitOf(h.id));
-            this._hoverPath.update(pts, [this._W, this._H], cr => R.strokePath(cr, pts, rgb, 0.45, 1.4));
+            this._hoverPath.update(pts, [this._W, this._H], cr => Render.strokePath(cr, pts, rgb, 0.45, 1.4));
         } else {
             this._hoverPath.hide();
         }
@@ -2424,9 +2488,9 @@ class OrreryScene {
         }
         let text = h.text;
         if (!text && h.ev)
-            text = `${A.formatDate(h.ev.t)} · ${h.ev.mission.short ?? h.ev.mission.name} · ${eventTitle(h.ev)}`;
+            text = `${Astro.formatDate(h.ev.t)} · ${h.ev.mission.short ?? h.ev.mission.name} · ${eventTitle(h.ev)}`;
         else if (!text)
-            text = A.formatMonth(h.t);
+            text = Astro.formatMonth(h.t);
         this._showTooltip(text);
         const w = this._tooltip.get_preferred_width(-1)[1];
         const [, ty] = this._timeline.actor.get_position();
@@ -2569,14 +2633,16 @@ export default class OrreryExtension extends Extension {
     disable() {
         if (this._timer)
             GLib.source_remove(this._timer);
-        for (const id of [this._relayoutId, this._raiseId, this._recheckId]) {
-            if (id)
-                GLib.source_remove(id);
-        }
+        if (this._relayoutId)
+            GLib.source_remove(this._relayoutId);
+        if (this._raiseId)
+            GLib.source_remove(this._raiseId);
+        if (this._recheckId)
+            GLib.source_remove(this._recheckId);
         this._timer = this._relayoutId = this._raiseId = this._recheckId = 0;
 
         if (this._scene && this._settings.get_string('mode') === 'replay')
-            this._settings.set_double('replay-jd', Math.min(this._scene.jd, A.jdNow()));
+            this._settings.set_double('replay-jd', Math.min(this._scene.jd, Astro.jdNow()));
         Main.layoutManager.disconnectObject(this);
         global.display.disconnectObject(this);
         Main.overview.disconnectObject(this);
@@ -2802,9 +2868,8 @@ export default class OrreryExtension extends Extension {
                 continue;
             if (w.is_fullscreen())
                 return 1;
-            const maximized = typeof w.is_maximized === 'function'
-                ? w.is_maximized()
-                : w.get_maximized() === Meta.MaximizeFlags.BOTH;
+            // is_maximized() arrived in GNOME 49; GNOME 48 has the properties.
+            const maximized = w.is_maximized?.() ?? (w.maximized_horizontally && w.maximized_vertically);
             if (maximized)
                 return 1;
             rects.push(w.get_frame_rect());
