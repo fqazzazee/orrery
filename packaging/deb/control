@@ -1,0 +1,15 @@
+Package: gnome-shell-extension-orrery
+Version: @VERSION@-1
+Architecture: all
+Maintainer: Fadi Q <fadi.qazzazee@gmail.com>
+Depends: gnome-shell (>= 48)
+Recommends: gstreamer1.0-plugins-good, gstreamer1.0-plugins-base, gir1.2-gst-plugins-base-1.0
+Section: gnome
+Priority: optional
+Homepage: https://github.com/fqazzazee/orrery
+Description: Live, OLED-black solar system wallpaper for GNOME Shell
+ Orrery turns the GNOME desktop into a live solar system: planets in their
+ real positions, spinning at their relative speeds, with the spacecraft of
+ the space age replaying their gravity-assist journeys. Click anything for
+ facts, scrub through history on a timeline, fly in to a planet's moons and
+ satellites, or pull back to the Oort cloud.

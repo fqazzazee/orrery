@@ -1,0 +1,17 @@
+Package: orrery-wallpaper
+Version: @VERSION@-1
+Architecture: all
+Maintainer: Fadi Q <fadi.qazzazee@gmail.com>
+Depends: gjs, gir1.2-gtk-4.0
+Recommends: gir1.2-gtk4layershell-1.0
+Section: x11
+Priority: optional
+Homepage: https://github.com/fqazzazee/orrery
+Description: Live solar system wallpaper for KDE, XFCE, Cinnamon, MATE, Sway and more
+ Orrery for desktops other than GNOME Shell (which has its own extension):
+ the solar system as it is right now, with the planets turned the way they
+ really face, their moons, and the spacecraft of the space age on their real
+ paths. "orrery-wallpaper daemon" keeps the wallpaper up to date on KDE
+ Plasma, XFCE, Cinnamon, MATE, Budgie, LXQt, Sway and Hyprland;
+ "orrery-wallpaper live" is an animated background on Wayland compositors
+ with layer-shell.

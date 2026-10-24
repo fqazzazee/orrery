@@ -1,0 +1,14 @@
+#!/bin/sh
+# Orrery for desktops other than GNOME Shell. Run "orrery-wallpaper --help".
+share=@SHARE@
+if [ "${1:-}" = live ]; then
+    # gtk4-layer-shell has to be loaded before Wayland's client library.
+    for lib in /usr/lib64/libgtk4-layer-shell.so.0 /usr/lib/libgtk4-layer-shell.so.0 \
+               /usr/lib/*-linux-gnu/libgtk4-layer-shell.so.0; do
+        if [ -e "$lib" ]; then
+            export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
+            break
+        fi
+    done
+fi
+exec gjs -m "$share/standalone/orrery-wallpaper.js" "$@"

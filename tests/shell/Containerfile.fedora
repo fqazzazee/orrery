@@ -1,0 +1,5 @@
+# GNOME Shell from a Fedora release: 43 has GNOME 49, 44 has 50, 45 has 51.
+ARG FEDORA=45
+FROM registry.fedoraproject.org/fedora:${FEDORA}
+RUN dnf -y -q install gnome-shell gnome-extensions-app mesa-dri-drivers mesa-libEGL dbus-daemon dbus-tools glib2 \
+        gstreamer1-plugins-good gstreamer1-plugins-base gjs procps-ng python3-dbusmock upower && dnf clean all

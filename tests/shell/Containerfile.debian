@@ -1,0 +1,7 @@
+# GNOME Shell from Debian: 13 (trixie) has GNOME 48.
+ARG DEBIAN=trixie
+FROM docker.io/library/debian:${DEBIAN}
+RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gnome-shell \
+        gnome-shell-extension-prefs libgl1-mesa-dri libegl1 dbus dbus-x11 python3-dbusmock gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-base gstreamer1.0-tools gir1.2-gst-plugins-base-1.0 gjs procps upower accountsservice >/dev/null \
+    && rm -rf /var/lib/apt/lists/*

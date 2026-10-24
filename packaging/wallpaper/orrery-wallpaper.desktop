@@ -1,0 +1,9 @@
+[Desktop Entry]
+# Copy to ~/.config/autostart/ on desktops that do not start systemd's
+# graphical-session.target (XFCE, MATE, LXQt...).
+Type=Application
+Name=Orrery wallpaper
+Comment=Keep the wallpaper showing the solar system as it is now
+Exec=orrery-wallpaper daemon
+NotShowIn=GNOME;
+X-GNOME-Autostart-enabled=true

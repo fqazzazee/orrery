@@ -2,7 +2,7 @@ UUID := orrery@fqazzazee.github.io
 EXTENSIONS_DIR := $(HOME)/.local/share/gnome-shell/extensions
 DEST := $(EXTENSIONS_DIR)/$(UUID)
 
-.PHONY: pack install link test clean
+.PHONY: pack install link test test-shell dist clean
 
 # Zip for sharing or uploading to extensions.gnome.org
 pack:
@@ -27,5 +27,18 @@ link:
 test:
 	gjs -m tests/unit.js
 
+# Orrery in a real GNOME Shell of another version, in a container:
+#   make test-shell DISTRO=fedora RELEASE=45     (GNOME 51; 44 is 50, 43 is 49)
+#   make test-shell DISTRO=debian RELEASE=trixie (GNOME 48)
+DISTRO ?= fedora
+RELEASE ?= 45
+test-shell:
+	tests/shell/run.sh $(DISTRO) $(RELEASE)
+
+# Release artifacts in dist/: the zip, rpm, deb and Arch packages, for the
+# extension and for orrery-wallpaper (other desktops)
+dist:
+	packaging/build.sh
+
 clean:
-	rm -f $(UUID).shell-extension.zip schemas/gschemas.compiled
+	rm -rf $(UUID).shell-extension.zip schemas/gschemas.compiled dist

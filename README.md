@@ -26,15 +26,30 @@ After leaving the planets, the Pioneers and Voyagers head out in their real dire
 
 ## Install
 
-```sh
-make link     # symlink this checkout into ~/.local/share/gnome-shell/extensions
-```
+Download from the [releases](https://github.com/fqazzazee/orrery/releases). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
-Log out and back in, then turn on **Orrery** in Extensions (or run `gnome-extensions enable orrery@fqazzazee.github.io`). Settings are in the extension's preferences.
+| Distribution | Package | Install |
+|---|---|---|
+| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-VERSION-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-*.rpm` |
+| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_VERSION-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_*.deb` |
+| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-VERSION-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-*.pkg.tar.zst` |
+| Any, for your user only | `orrery@fqazzazee.github.io.shell-extension.zip` | `gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip` |
+
+Log out and back in, then turn on **Orrery** in Extensions (or `gnome-extensions enable orrery@fqazzazee.github.io`). Settings are in the extension's preferences, or the gear on the timeline.
+
+From a checkout: `make link` symlinks it into `~/.local/share/gnome-shell/extensions`.
 
 The scene covers the primary monitor. The overview and workspace switches show live copies of it (turn that off under Content › Interaction if you prefer your wallpaper there).
 
 Clicks reach the scene wherever no window covers the desktop. A desktop-icons extension draws a window over the whole desktop, which takes those clicks instead.
+
+### Other desktops
+
+GNOME Shell extensions only run in GNOME Shell. For **KDE Plasma, XFCE, Cinnamon, MATE, Budgie, LXQt, Sway, Hyprland** and the rest there is `orrery-wallpaper`, in the same three package formats. It draws the same solar system, without the clicking:
+
+- `systemctl --user enable --now orrery-wallpaper` keeps the wallpaper showing the solar system as it is right now, redrawn every 10 minutes, set with your desktop's own tool (`plasma-apply-wallpaperimage`, `xfconf-query`, `gsettings`, `swaymsg`, `hyprpaper`, `swaybg` or `feh`). On desktops that do not start systemd's graphical session (XFCE, MATE, LXQt), copy `/usr/share/orrery-wallpaper/autostart/orrery-wallpaper.desktop` to `~/.config/autostart/` instead.
+- `systemctl --user enable --now orrery-wallpaper-live` runs an animated background on Wayland compositors with layer-shell (Sway, Hyprland, niri, labwc, river, Wayfire, COSMIC). It needs `gtk4-layer-shell`.
+- `orrery-wallpaper render picture.png [--date 1989-08-25] [--size 3840x2160]` draws one picture. `orrery-wallpaper --help` lists the rest.
 
 ## Power and OLED care
 
@@ -52,9 +67,14 @@ Clicks reach the scene wherever no window covers the desktop. A desktop-icons ex
 
 ```sh
 make test                    # unit tests for the orbital math, every mission path and every card (gjs only)
+make test-shell RELEASE=45   # run it in a real GNOME Shell 51 in a container (44: GNOME 50, 43: 49;
+                             #   DISTRO=debian RELEASE=trixie: 48), and report any JavaScript error
+make dist                    # build the zip and the rpm, deb and Arch packages into dist/ (podman or docker)
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
+Pushing a tag like `v1.3.0` (matching `version-name` in `metadata.json`) builds every package on GitHub Actions and publishes them as a release.
+
 Asteroid and comet orbits are from JPL's Small-Body Database. Mission dates after today are plans and may change.
 
-GNOME Shell 50. License: GPL-2.0-or-later.
+GNOME Shell 48 to 51. License: GPL-2.0-or-later.

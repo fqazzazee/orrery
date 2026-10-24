@@ -1,0 +1,13 @@
+[Unit]
+Description=Orrery: keep the wallpaper showing the solar system as it is now
+Documentation=https://github.com/fqazzazee/orrery
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=@BIN@ daemon
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=graphical-session.target

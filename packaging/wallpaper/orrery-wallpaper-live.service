@@ -1,0 +1,13 @@
+[Unit]
+Description=Orrery: animated solar system background (Wayland layer-shell)
+Documentation=https://github.com/fqazzazee/orrery
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=@BIN@ live
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

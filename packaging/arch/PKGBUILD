@@ -1,0 +1,30 @@
+# Arch Linux and derivatives. Built by packaging/build.sh.
+pkgbase=orrery
+pkgname=('gnome-shell-extension-orrery' 'orrery-wallpaper')
+pkgver=@VERSION@
+pkgrel=1
+arch=('any')
+url='https://github.com/fqazzazee/orrery'
+license=('GPL-2.0-or-later')
+makedepends=('glib2')
+source=("orrery-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package_gnome-shell-extension-orrery() {
+    pkgdesc='Live, OLED-black solar system wallpaper for GNOME Shell'
+    depends=('gnome-shell>=48')
+    optdepends=('gst-plugins-good: background music'
+                'gst-plugins-base: background music')
+    cd "orrery-${pkgver}"
+    sh packaging/install-extension.sh "${pkgdir}" /usr
+    install -Dm 0644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
+
+package_orrery-wallpaper() {
+    pkgdesc='Live solar system wallpaper for KDE, XFCE, Cinnamon, MATE, Sway, Hyprland and more'
+    depends=('gjs' 'gtk4')
+    optdepends=('gtk4-layer-shell: animated background on Wayland compositors')
+    cd "orrery-${pkgver}"
+    sh packaging/install-wallpaper.sh "${pkgdir}" /usr
+    install -Dm 0644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
