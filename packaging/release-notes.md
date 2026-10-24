@@ -1,4 +1,10 @@
-The first packaged release of Orrery: a live, OLED-black solar system as your wallpaper.
+Orrery, a live, OLED-black solar system as your wallpaper, ready for extensions.gnome.org.
+
+## What's new in 1.3.1
+
+- Turning Orrery off now also frees its cached opposition and conjunction dates, as GNOME's extension review guidelines ask.
+- The extension's metadata links to this repository for bug reports, and to Buy me a coffee.
+- A [project page](https://fqazzazee.github.io/orrery/) with screenshots and recordings, and a README to match.
 
 ## Install
 
@@ -6,9 +12,9 @@ The first packaged release of Orrery: a live, OLED-black solar system as your wa
 
 | Distribution | File | Command |
 |---|---|---|
-| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.0-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.0-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
-| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.0-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.0-1_all.deb` |
-| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.0-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.0-1-any.pkg.tar.zst` |
+| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.1-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.1-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
+| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.1-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.1-1_all.deb` |
+| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.1-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.1-1-any.pkg.tar.zst` |
 | Any distribution, just for you | `orrery@fqazzazee.github.io.shell-extension.zip` | `gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip` |
 
 **KDE Plasma, XFCE, Cinnamon, MATE, Budgie, LXQt, Sway, Hyprland and others** — install `orrery-wallpaper` (same three formats), then:
@@ -17,7 +23,7 @@ The first packaged release of Orrery: a live, OLED-black solar system as your wa
 - `systemctl --user enable --now orrery-wallpaper-live` instead runs an animated background on Wayland compositors with layer-shell (Sway, Hyprland, niri, labwc, river, Wayfire, COSMIC).
 - Or run `orrery-wallpaper render picture.png` for a single picture. `orrery-wallpaper --help` lists the options.
 
-`orrery-1.3.0.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
+`orrery-1.3.1.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
 
 ## What it does
 

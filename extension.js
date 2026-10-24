@@ -11,7 +11,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as A from './lib/astro.js';
 import {BODY, LAGRANGE, LPOINT, MOON, PLANETS, SMALL, SMALL_BODIES, SMALL_PLANETS, moonsOf, placeName} from './lib/bodies.js';
 import {SAT} from './lib/satellites.js';
-import {FactDeck, details, eventCard, eventDate, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
+import {FactDeck, clearCache, details, eventCard, eventDate, eventTitle, missionDetails, missionStatus} from './lib/facts.js';
 import {FarLayer} from './lib/far.js';
 import {PlanetView} from './lib/focus.js';
 import {SceneMirror} from './lib/mirror.js';
@@ -2590,6 +2590,7 @@ export default class OrreryExtension extends Extension {
         this._scene?.destroy();
         this._scene = null;
         this._settings = null;
+        clearCache();
     }
 
     _relayout() {
