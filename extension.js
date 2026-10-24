@@ -335,7 +335,31 @@ class OrreryScene {
     }
 
     _spinning() {
-        return this._settings.get_boolean('spin-planets') && !this.powerSaving;
+        return this._settings.get_boolean('spin-planets') && (!this.powerSaving || this._spinAnyway);
+    }
+
+    set powerSaving(on) {
+        if (on !== this._powerSaving)
+            this._spinAnyway = false;
+        this._powerSaving = on;
+        if (this._timeline)
+            this._syncTimelineState();
+    }
+
+    get powerSaving() {
+        return !!this._powerSaving;
+    }
+
+    // The spin button: on battery saver it first overrides the saver.
+    _toggleSpin() {
+        if (this._settings.get_boolean('spin-planets') && this.powerSaving && !this._spinAnyway) {
+            this._spinAnyway = true;
+            this.onActivity?.();
+            this._syncTimelineState();
+            return;
+        }
+        this._spinAnyway = false;
+        this._settings.set_boolean('spin-planets', !this._settings.get_boolean('spin-planets'));
     }
 
     // Nothing moves: the extension can drop to a few frames per second.
@@ -974,7 +998,7 @@ class OrreryScene {
             speed: dir => this._changeSpeed(dir),
             now: () => this._goNow(),
             sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
-            spin: () => this._settings.set_boolean('spin-planets', !this._settings.get_boolean('spin-planets')),
+            spin: () => this._toggleSpin(),
             zoom: dir => this._zoom(dir),
             layers: () => this._togglePanel(),
             prefs: () => this.onOpenPrefs?.(),
@@ -1121,7 +1145,8 @@ class OrreryScene {
             zoom: this._focus ? 'planet' : this._zoomTarget >= 0.999 ? 'max' : this._zoomTarget > 0.01 ? 'far' : 'system',
             sunlight: this._settings.get_boolean('sunlight-view'),
             live: this._live() && !this._browsing,
-            spinning: this._settings.get_boolean('spin-planets'),
+            spinning: this._spinning(),
+            spinHeld: this._settings.get_boolean('spin-planets') && !this._spinning(),
             music: this.musicState,
             layers: this._panel?.isOpen,
         });
@@ -1596,7 +1621,9 @@ class OrreryScene {
     // A swarm of dots 60 degrees either side of Jupiter: the Trojans.
     _updateTrojans() {
         const jup = this._bodyById('jupiter');
-        if (!this._settings.get_boolean('show-belts') || !jup) {
+        // (Up close the system is not updated, so after a relayout its
+        // planets have no positions yet.)
+        if (!this._settings.get_boolean('show-belts') || !jup?.pos) {
             this._trojans.hide();
             return;
         }
@@ -2417,6 +2444,18 @@ class OrreryScene {
             }
             if (this._selected?.tr)
                 this._deselect();
+            // Cards, hover and hit areas still point at the old craft.
+            for (const c of this._eventCards)
+                c.card.dismiss();
+            this._eventCards = [];
+            if (this._factSubject?.tr) {
+                this._factCard?.dismiss();
+                this._factCard = null;
+                this._factSubject = null;
+            }
+            if (this._hover?.tr)
+                this._setHover(null);
+            this._trailHits = [];
             this._buildTrajectories();
             this._buildCraft();
             this._timelineRange();
@@ -2702,11 +2741,26 @@ export default class OrreryExtension extends Extension {
                 again = GLib.SOURCE_REMOVE;
             }
         }
-        if (!this._paused) {
-            this._scene.tick(dt);
-            this._scene.syncHidden();
-        }
+        if (!this._paused)
+            this._safely(() => {
+                this._scene.tick(dt);
+                this._scene.syncHidden();
+            });
         return again;
+    }
+
+    // A throw inside the timer would remove it and freeze everything, so
+    // log it (once per message) and carry on.
+    _safely(f) {
+        try {
+            f();
+        } catch (e) {
+            this._logged ??= new Set();
+            if (!this._logged.has(e.message)) {
+                this._logged.add(e.message);
+                console.error(`Orrery: ${e.message}\n${e.stack}`);
+            }
+        }
     }
 
     // Update pause and dim states; true if the frame rate should change.
