@@ -1,0 +1,181 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+/* Orrery's project page, in the extension's own look: pure black, dim text,
+   and the colors of the planets and the spacecraft. */
+
+:root {
+  --page: #000000;
+  --panel: #07080b;
+  --surface: #11141a;
+  --line: #1d222c;
+  --text: #c3c9d6;
+  --bright: #eef1f7;
+  --dim: #7f889a;
+  --sun: #ffc46b;
+  --earth: #4a86d8;
+  --mars: #d0683c;
+  --saturn: #e6cf98;
+  --uranus: #9ad7df;
+  --neptune: #6f8fef;
+  --voyager: #7fd0ff;
+  --lucy: #ffd1f0;
+  --mint: #8fe3c0;
+  --ink: #000000;
+  --mono: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Outfit", system-ui, -apple-system, "Segoe UI", Cantarell, "Noto Sans", sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font: 17px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--voyager); text-underline-offset: 3px; }
+a:hover { color: var(--sun); }
+
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: 0.88em; background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; color: var(--bright); }
+
+img, video { max-width: 100%; height: auto; display: block; }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 600px) { .wrap { padding: 0 16px; } body { font-size: 16px; } }
+
+/* The top bar: the extension's date line and mission list, in one row. */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--page) 86%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 18px; height: 54px; font-size: 14px; }
+.topbar .brand { display: flex; align-items: center; gap: 10px; color: var(--bright); font-weight: 600; letter-spacing: 0.08em; text-decoration: none; }
+.topbar .brand svg { width: 26px; height: 26px; }
+.topbar nav { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; }
+.topbar nav a { color: var(--text); text-decoration: none; padding: 4px 9px; border-radius: 99px; white-space: nowrap; }
+.topbar nav a:hover { background: var(--surface); color: var(--bright); }
+.topbar nav .n { color: var(--sun); font-weight: 700; margin-right: 5px; }
+@media (max-width: 860px) { .topbar nav .label { display: none; } }
+
+/* The hero: a little orrery turning beside the name. */
+.hero { padding-top: 64px; padding-bottom: 36px; }
+.hero-art { display: flex; align-items: center; gap: clamp(18px, 4vw, 44px); }
+.mini { width: clamp(120px, 22vw, 210px); height: auto; flex: none; }
+.mini .orbit { fill: none; stroke: #ffffff; stroke-opacity: 0.16; stroke-width: 1; }
+.mini .turn { transform-box: view-box; transform-origin: 100px 100px; animation: turn linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mini .turn { animation: none; } }
+.wordmark { font-weight: 200; font-size: clamp(54px, 10vw, 112px); letter-spacing: 0.14em; color: var(--bright); margin: 0; line-height: 1; }
+.wordmark span { color: var(--sun); }
+
+.tagline { font-size: clamp(20px, 2.6vw, 27px); line-height: 1.4; color: var(--bright); max-width: 820px; margin: 30px 0 10px; font-weight: 400; }
+.sub { color: var(--dim); max-width: 820px; margin: 0 0 28px; }
+.sub b { color: var(--text); font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.button {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 99px; font: 600 15px var(--sans); text-decoration: none;
+  border: 1px solid var(--line); color: var(--text); background: var(--panel);
+}
+.button:hover { border-color: var(--voyager); color: var(--voyager); }
+.button.primary { background: var(--sun); border-color: var(--sun); color: var(--ink); }
+.button.primary:hover { filter: brightness(1.07); color: var(--ink); }
+.versions { margin-top: 18px; color: var(--dim); font-size: 14px; }
+.versions span { display: inline-block; border: 1px solid var(--line); border-radius: 99px; padding: 1px 10px; margin: 4px 4px 0 0; }
+
+/* Screens and clips, framed like a monitor. */
+.screen {
+  margin: 40px 0 0;
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #000;
+  box-shadow: 0 0 0 1px #000, 0 30px 80px -30px rgba(74, 134, 216, 0.35);
+}
+.screen video, .screen img { width: 100%; }
+.caption { color: var(--dim); font-size: 14px; margin: 12px 0 0; }
+
+/* Sections, each opened like one of the extension's cards. */
+section { padding: 64px 0; border-top: 1px solid var(--line); }
+.kicker { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sun); margin: 0 0 6px; font-weight: 600; }
+h2 { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.2; color: var(--bright); margin: 0 0 14px; font-weight: 500; }
+h3 { color: var(--bright); margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.lead { font-size: 19px; max-width: 820px; color: var(--text); }
+
+/* What it is: two columns, words and a picture. */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+.split.flip > :first-child { order: 2; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } .split.flip > :first-child { order: 0; } }
+.split > * { min-width: 0; }
+.split .screen { margin: 0; }
+.split ul { padding-left: 1.1em; }
+.split li { margin: 6px 0; }
+.split li::marker { color: var(--sun); }
+
+/* Feature cards, each with a planet's color. */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 30px; }
+@media (max-width: 960px) { .features { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .features { grid-template-columns: 1fr; } }
+.feature {
+  --c: var(--voyager);
+  border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; background: var(--panel);
+  border-top: 2px solid var(--c);
+}
+.feature .icon { display: inline-block; color: var(--c); font-size: 20px; margin-bottom: 6px; }
+.feature p { margin: 0; color: var(--text); font-size: 15.5px; }
+.dim { color: var(--dim); }
+
+/* A gallery of close-ups. */
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+@media (max-width: 860px) { .gallery { grid-template-columns: 1fr; } }
+.gallery figure { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #000; }
+.gallery figcaption { padding: 10px 14px; font-size: 14px; color: var(--dim); border-top: 1px solid var(--line); }
+.gallery figcaption b { color: var(--bright); font-weight: 600; }
+
+/* The missions, as the extension's mission list. */
+.missions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 26px; }
+@media (max-width: 860px) { .missions { grid-template-columns: 1fr; } }
+.missions h3 { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 99px; padding: 2px 11px; font-size: 14px; color: var(--bright); background: var(--panel); }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--voyager)); }
+
+/* Numbers, in a row. */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 30px; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--panel); }
+.stat b { display: block; font-size: 32px; font-weight: 300; color: var(--bright); line-height: 1.1; }
+.stat span { color: var(--dim); font-size: 14px; }
+
+/* Install: terminal blocks. */
+.stack { display: grid; gap: 14px; margin-top: 18px; }
+.term {
+  margin: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  font-size: 14px; line-height: 1.7; color: var(--bright); overflow-x: auto; white-space: pre;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+.term .p { color: var(--sun); user-select: none; }
+.term .c { color: var(--dim); }
+.label { color: var(--dim); font-size: 14px; margin: 6px 0 -6px; }
+.distros { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 18px; }
+@media (max-width: 860px) { .distros { grid-template-columns: 1fr; } }
+.distros h3 { font-size: 16px; margin-bottom: 8px; }
+.distros > * { min-width: 0; }
+.distros .term { margin: 0; }
+
+/* FAQ. */
+.faq details { border: 1px solid var(--line); border-radius: 12px; padding: 0 18px; background: var(--panel); margin: 10px 0; }
+.faq summary { cursor: pointer; padding: 14px 0; color: var(--bright); font-weight: 500; list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::before { content: "›"; color: var(--sun); display: inline-block; width: 1.2em; transition: transform 0.15s; }
+.faq details[open] summary::before { transform: rotate(90deg); }
+.faq details p { margin: 0 0 16px; }
+
+footer { border-top: 1px solid var(--line); padding: 30px 0 46px; color: var(--dim); font-size: 14px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; }

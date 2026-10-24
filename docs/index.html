@@ -1,0 +1,390 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orrery — the solar system, live on your desktop</title>
+  <meta name="description" content="Orrery turns your Linux desktop into a live solar system: planets where they really are, 40 spacecraft on their real paths, moons, comets and the Oort cloud, drawn in pure black for OLED screens. A GNOME Shell extension for GNOME 48 to 51, with a companion for KDE, XFCE, Sway, Hyprland and more.">
+  <meta name="theme-color" content="#000000">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Orrery — the solar system, live on your desktop">
+  <meta property="og:description" content="Planets where they really are, 40 spacecraft on their real paths, moons, comets and the Oort cloud, in pure OLED black. For GNOME, KDE, XFCE, Sway, Hyprland and more.">
+  <meta property="og:url" content="https://fqazzazee.github.io/orrery/">
+  <meta property="og:image" content="https://fqazzazee.github.io/orrery/social-preview.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="Orrery on a GNOME desktop: the planets, the spacecraft's trails and a fact card, on pure black">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="icon.svg" alt="" width="26" height="26"> ORRERY</a>
+    <nav aria-label="Sections">
+      <a href="#what"><span class="n">1</span><span class="label">What it is</span></a>
+      <a href="#features"><span class="n">2</span><span class="label">Features</span></a>
+      <a href="#closeup"><span class="n">3</span><span class="label">Up close</span></a>
+      <a href="#afar"><span class="n">4</span><span class="label">From afar</span></a>
+      <a href="#missions"><span class="n">5</span><span class="label">Missions</span></a>
+      <a href="#install"><span class="n">6</span><span class="label">Install</span></a>
+      <a href="#faq"><span class="n">7</span><span class="label">FAQ</span></a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="hero-art">
+      <!-- A small orrery: the inner planets turn at their true relative
+           speeds (one Earth year in 12 seconds). -->
+      <svg class="mini" viewBox="0 0 200 200" role="img" aria-label="A little orrery: the Sun and the inner planets on their orbits">
+        <defs>
+          <radialGradient id="sun"><stop offset="0" stop-color="#fffbe9"/><stop offset="0.6" stop-color="#ffdb84"/><stop offset="1" stop-color="#ff9b38"/></radialGradient>
+          <radialGradient id="glow"><stop offset="0" stop-color="#ffc46b" stop-opacity="0.45"/><stop offset="1" stop-color="#ffc46b" stop-opacity="0"/></radialGradient>
+        </defs>
+        <g transform="translate(100 100) scale(1 0.62) translate(-100 -100)">
+          <circle class="orbit" cx="100" cy="100" r="26"/>
+          <circle class="orbit" cx="100" cy="100" r="40"/>
+          <circle class="orbit" cx="100" cy="100" r="55"/>
+          <circle class="orbit" cx="100" cy="100" r="72"/>
+          <circle class="orbit" cx="100" cy="100" r="94"/>
+          <g class="turn" style="animation-duration: 2.9s"><circle cx="126" cy="100" r="2.6" fill="#a9a29a"/></g>
+          <g class="turn" style="animation-duration: 7.4s"><circle cx="140" cy="100" r="4" fill="#e3c27f"/></g>
+          <g class="turn" style="animation-duration: 12s"><circle cx="155" cy="100" r="4.2" fill="#4a86d8"/><circle cx="163" cy="100" r="1.4" fill="#cfcac0"/></g>
+          <g class="turn" style="animation-duration: 22.6s"><circle cx="172" cy="100" r="3.2" fill="#d0683c"/></g>
+          <g class="turn" style="animation-duration: 142s"><circle cx="194" cy="100" r="7" fill="#d9b48a"/></g>
+        </g>
+        <circle cx="100" cy="100" r="24" fill="url(#glow)"/>
+        <circle cx="100" cy="100" r="11" fill="url(#sun)"/>
+      </svg>
+      <h1 class="wordmark">orrery<span>.</span></h1>
+    </div>
+    <p class="tagline">The solar system, live on your desktop: every planet where it really is,
+      and the spacecraft of the space age flying the paths they really flew.</p>
+    <p class="sub">Click a planet for its story, fly in to its moons and satellites, scrub through
+      sixty years of missions, or pull back past the Voyagers to the Oort cloud. All of it in
+      <b>pure black for OLED screens</b>. A <b>GNOME Shell extension</b>, with a companion for
+      <b>KDE, XFCE, Cinnamon, Sway, Hyprland</b> and more.</p>
+    <div class="actions">
+      <a class="button primary" href="#install">Install v1.3.0</a>
+      <a class="button" href="https://github.com/fqazzazee/orrery/releases/latest">Releases</a>
+      <a class="button" href="https://github.com/fqazzazee/orrery">Source on GitHub</a>
+    </div>
+    <div class="versions">
+      <span>GNOME 48 · 49 · 50 · 51</span><span>Fedora · Debian · Ubuntu · Arch</span><span>KDE · XFCE · Sway · Hyprland</span>
+    </div>
+    <div class="screen">
+      <video src="media/hero.mp4" poster="screenshots/desktop.webp" autoplay muted loop playsinline
+             aria-label="A year of today's missions at sixty days a second: the planets turn, the spacecraft fly, cards pop up at each flyby"></video>
+    </div>
+    <p class="caption">2025 at sixty days a second, recorded from the extension in GNOME Shell. The planets spin at their true relative speeds; a card pops up at every launch, flyby and arrival.</p>
+  </div>
+
+  <section id="what">
+    <div class="wrap">
+      <div class="split">
+        <div>
+          <p class="kicker">What it is</p>
+          <h2>A real orrery, where your wallpaper was</h2>
+          <p>An orrery is the old clockwork model of the solar system. This one runs on real
+            astronomy. The planets follow NASA JPL's orbits and turn the way they really face, so
+            Earth's day side is the right one for the time on screen. The moons sit where they
+            really are. Every spacecraft follows a path fitted to JPL's record of where it went,
+            and the missions still to come fly the routes they are planned to.</p>
+          <ul>
+            <li><b>Live</b> shows the sky right now; <b>Replay</b> runs the space age from 1972.</li>
+            <li>Point at anything to trace its orbit; click it for a card of live facts.</li>
+            <li>Distances are squeezed so Mercury and Neptune share one screen; the camera, scale and zoom are yours.</li>
+          </ul>
+        </div>
+        <div class="screen"><img src="screenshots/card-jupiter.webp" width="1920" height="1080" loading="lazy"
+             alt="Jupiter's card: distance, light time, where it is in Earth's sky, its next opposition, season, orbit, gravity, air and more"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <p class="kicker">Main features</p>
+      <h2>Everything up there, and the story of it</h2>
+      <div class="features">
+        <div class="feature" style="--c: var(--sun)"><span class="icon">☉</span><h3>Real positions</h3>
+          <p>JPL's orbital elements put each planet where it was, or is. Uranus rolls on its side; Saturn's rings tilt as they really do.</p></div>
+        <div class="feature" style="--c: var(--voyager)"><span class="icon">✦</span><h3>40 spacecraft</h3>
+          <p>Mariner 10 to Dragonfly, on paths checked against JPL Horizons. Trails fade behind them; cards mark each flyby.</p></div>
+        <div class="feature" style="--c: var(--saturn)"><span class="icon">◐</span><h3>Moons, comets, more</h3>
+          <p>22 moons, Ceres and Vesta, Halley and interstellar 3I/ATLAS, the Lagrange points and Jupiter's Trojans.</p></div>
+        <div class="feature" style="--c: var(--earth)"><span class="icon">⌕</span><h3>Fly in to a planet</h3>
+          <p>Double-click a planet for its moons where they really are, its satellites and orbiters, and the rovers on its surface.</p></div>
+        <div class="feature" style="--c: var(--neptune)"><span class="icon">◎</span><h3>Pull back to the stars</h3>
+          <p>Past the heliopause and the Oort cloud to Alpha Centauri, with the Voyagers' paths marked to 40,000 AD.</p></div>
+        <div class="feature" style="--c: var(--lucy)"><span class="icon">▭</span><h3>Cards that tell the story</h3>
+          <p>Where it is in your sky, its next opposition, season, gravity, air, who found it, who visited, and trivia.</p></div>
+        <div class="feature" style="--c: var(--mint)"><span class="icon">⏵</span><h3>A timeline</h3>
+          <p>Drag through sixty years; click a tick to jump to an event; click the playhead to pause. Top or bottom, center or corner.</p></div>
+        <div class="feature" style="--c: var(--mars)"><span class="icon">☀</span><h3>Sunlight view</h3>
+          <p>The plane of the planets colored by how much sunlight falls there, with the habitable zone. It can follow your charger.</p></div>
+        <div class="feature" style="--c: var(--uranus)"><span class="icon">♪</span><h3>Space music</h3>
+          <p>A calm ambient piece made up as it plays, or your own folder of music, from a button on the timeline.</p></div>
+        <div class="feature" style="--c: var(--sun)"><span class="icon">▦</span><h3>In the overview too</h3>
+          <p>The Activities overview and workspace switches show the solar system, not the plain wallpaper.</p></div>
+        <div class="feature" style="--c: var(--voyager)"><span class="icon">☰</span><h3>Show and hide</h3>
+          <p>A panel of chips on the timeline: orbits, names, moons, trails, and every mission one by one or all at once.</p></div>
+        <div class="feature" style="--c: var(--mint)"><span class="icon">▪</span><h3>Kind to OLED and battery</h3>
+          <p>Pure black, pixel shift, dimming when idle, pausing behind windows, slower on battery. <span class="dim">Nothing runs that cannot be seen.</span></p></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>40</b><span>spacecraft and telescopes</span></div>
+        <div class="stat"><b>22</b><span>moons, where they really are</span></div>
+        <div class="stat"><b>1972–2500</b><span>on the timeline</span></div>
+        <div class="stat"><b>400,000 AU</b><span>from the Sun to the edge of the view</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="closeup">
+    <div class="wrap">
+      <p class="kicker">Up close</p>
+      <h2>Fly in to a planet</h2>
+      <p class="lead">Double-click a planet, scroll the wheel over it, or press the zoom button on its card.
+        Near the planet the scale is true, so the space station skims the surface; farther out it
+        turns logarithmic, so the Moon and the telescopes at L2 still fit.</p>
+      <div class="screen">
+        <video src="media/flyin.mp4" poster="screenshots/saturn.webp" autoplay muted loop playsinline
+               aria-label="Flying in to Saturn: the solar system swells and fades, Saturn and its moons appear and circle"></video>
+      </div>
+      <div class="gallery">
+        <figure><img src="screenshots/earth-iss.webp" width="1920" height="1080" loading="lazy" alt="Earth up close with the Moon, the ISS, Hubble, Tiangong, GPS, Starlink and the geostationary belt">
+          <figcaption><b>Earth</b> · the ISS, Hubble, GPS, Starlink, the geostationary belt, the Moon and the telescopes at L1 and L2</figcaption></figure>
+        <figure><img src="screenshots/mars.webp" width="1920" height="1080" loading="lazy" alt="Mars up close with Phobos, Deimos and its orbiters">
+          <figcaption><b>Mars</b> · Phobos and Deimos, ten orbiters past and present, and the rovers' landing sites</figcaption></figure>
+        <figure><img src="screenshots/jupiter.webp" width="1920" height="1080" loading="lazy" alt="Jupiter up close with the Galilean moons and Juno's long polar orbit">
+          <figcaption><b>Jupiter</b> · Io, Europa, Ganymede and Callisto where they really are, and Juno looping over the poles</figcaption></figure>
+      </div>
+      <p class="caption">Time runs at the planet's own pace up close, a thousand-odd times real speed, with the clock in UTC. Pause it and the moons keep circling.</p>
+    </div>
+  </section>
+
+  <section id="afar">
+    <div class="wrap">
+      <div class="split flip">
+        <div>
+          <p class="kicker">From afar</p>
+          <h2>Out to the Oort cloud</h2>
+          <p>Scroll down on the desktop to pull back: past Neptune and the Kuiper belt, through the
+            termination shock and the heliopause, out past a light-day, a light-month and a light-year,
+            through the Oort cloud's trillions of comets to Alpha Centauri.</p>
+          <p>The Voyagers, the Pioneers and New Horizons fly out along dashed paths marked with the
+            years they get there, to 40,000 AD. The timeline stretches to the year 2500, in years per
+            second: watch Voyager 1 reach the inner Oort cloud around 2300.</p>
+        </div>
+        <div class="screen">
+          <video src="media/zoomout.mp4" poster="screenshots/far.webp" autoplay muted loop playsinline
+                 aria-label="Zooming out from the planets past the heliopause to the Oort cloud and the nearest stars"></video>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="missions">
+    <div class="wrap">
+      <p class="kicker">The missions</p>
+      <h2>Sixty years of exploring, and what comes next</h2>
+      <p class="lead">Each path joins the real positions of the worlds on the real dates of its
+        encounters, and where a craft fired its engines on the way, waypoints from NASA JPL's
+        Horizons keep it on the path it really flew. Dates after today are the published plans.</p>
+      <div class="missions">
+        <div>
+          <h3>The space age</h3>
+          <div class="chips">
+        <span class="chip" style="--c: #ffd27a">Mariner 10</span>
+        <span class="chip" style="--c: #ffb38a">Pioneer 10</span>
+        <span class="chip" style="--c: #f59a9a">Pioneer 11</span>
+        <span class="chip" style="--c: #ffcf9e">Giotto</span>
+        <span class="chip" style="--c: #ffe08a">Galileo</span>
+        <span class="chip" style="--c: #e9b8ff">Ulysses</span>
+        <span class="chip" style="--c: #c9a7ff">Cassini</span>
+        <span class="chip" style="--c: #9fd0ff">Rosetta</span>
+        <span class="chip" style="--c: #ffa86b">MESSENGER</span>
+        <span class="chip" style="--c: #7ff0e0">Dawn</span>
+        <span class="chip" style="--c: #ff6b6b">DART</span>
+          </div>
+        </div>
+        <div>
+          <h3>Flying now, and next</h3>
+          <div class="chips">
+        <span class="chip" style="--c: #8fe3c0">Voyager 2</span>
+        <span class="chip" style="--c: #7fd0ff">Voyager 1</span>
+        <span class="chip" style="--c: #a8f08a">New Horizons</span>
+        <span class="chip" style="--c: #ff9fd0">Juno</span>
+        <span class="chip" style="--c: #ff8fa8">Hayabusa2</span>
+        <span class="chip" style="--c: #b6ff7a">OSIRIS-APEX</span>
+        <span class="chip" style="--c: #ffe36b">Parker</span>
+        <span class="chip" style="--c: #8fb8ff">BepiColombo</span>
+        <span class="chip" style="--c: #ffe9a8">Solar Orbiter</span>
+        <span class="chip" style="--c: #ffd1f0">Lucy</span>
+        <span class="chip" style="--c: #9ad8ff">Psyche</span>
+        <span class="chip" style="--c: #7affc8">Juice</span>
+        <span class="chip" style="--c: #89a8ff">Europa Clipper</span>
+        <span class="chip" style="--c: #ffc38f">Hera</span>
+        <span class="chip" style="--c: #ff7f6b">Tianwen-2</span>
+        <span class="chip" style="--c: #c2ffa0">ESCAPADE</span>
+        <span class="chip" style="--c: #ffb0e0">MMX</span>
+        <span class="chip" style="--c: #ffcc66">Dragonfly · 2028</span>
+          </div>
+        </div>
+        <div>
+          <h3>Telescopes at L1 and L2</h3>
+          <div class="chips">
+        <span class="chip" style="--c: #ffd36b">SOHO</span>
+        <span class="chip" style="--c: #a0c4ff">WMAP</span>
+        <span class="chip" style="--c: #ff9f7a">Herschel</span>
+        <span class="chip" style="--c: #b8a8ff">Planck</span>
+        <span class="chip" style="--c: #c8f0ff">Gaia</span>
+        <span class="chip" style="--c: #ffd9a0">JWST</span>
+        <span class="chip" style="--c: #9fe0ff">Euclid</span>
+        <span class="chip" style="--c: #ffa860">Aditya-L1</span>
+        <span class="chip" style="--c: #a8ffd9">IMAP</span>
+        <span class="chip" style="--c: #d0b8ff">Roman</span>
+        <span class="chip" style="--c: #f0c8ff">PLATO · 2027</span>
+          </div>
+        </div>
+      </div>
+      <div class="split" style="margin-top: 40px">
+        <div class="screen"><img src="screenshots/voyager2.webp" width="1920" height="1080" loading="lazy"
+             alt="Voyager 2 days before its Neptune flyby in August 1989, with its card listing every encounter"></div>
+        <div>
+          <h3>Every encounter, one click away</h3>
+          <p>A spacecraft's card lists its launches, flybys and arrivals; click one and the timeline
+            jumps there. Here is Voyager 2 a few days before Neptune, in August 1989, on the only
+            visit any spacecraft has made to it.</p>
+          <p class="dim">Every path is checked against JPL's real trajectory, month by month: most stay
+            within a few percent of the distance from the Sun.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="overview">
+    <div class="wrap">
+      <div class="split">
+        <div>
+          <p class="kicker">Everywhere on the desktop</p>
+          <h2>In the overview, the panel and your ears</h2>
+          <p>Open Activities and the workspaces show the solar system, still moving, with the
+            app grid over a dimmed copy of it. The timeline's buttons pause and play, change the
+            speed, stop the spin, play the music, open a panel to show and hide things, and open
+            the settings.</p>
+        </div>
+        <div class="screen">
+          <video src="media/overview.mp4" poster="screenshots/overview.webp" autoplay muted loop playsinline
+                 aria-label="Opening the Activities overview: the workspace card shows the solar system"></video>
+        </div>
+      </div>
+      <div class="gallery" style="grid-template-columns: repeat(2, 1fr)">
+        <figure><img src="screenshots/panel.webp" width="1920" height="1080" loading="lazy" alt="The On the desktop panel of chips">
+          <figcaption><b>On the desktop</b> · show and hide things, and every mission</figcaption></figure>
+        <figure><img src="screenshots/sunlight.webp" width="1920" height="1080" loading="lazy" alt="The sunlight view">
+          <figcaption><b>Sunlight view</b> · from white-hot near the Sun to Neptune's 1.5 W/m²</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <p class="kicker">Install</p>
+      <h2>GNOME 48 to 51, on any distribution</h2>
+      <p>From the <a href="https://github.com/fqazzazee/orrery/releases/latest">latest release</a>. Then log
+        out and back in and turn on Orrery in Extensions.</p>
+      <div class="distros">
+        <div><h3>Fedora, RHEL, openSUSE</h3>
+<pre class="term"><span class="p">$ </span>sudo dnf install https://github.com/fqazzazee/orrery/releases/download/v1.3.0/gnome-shell-extension-orrery-1.3.0-1.noarch.rpm</pre></div>
+        <div><h3>Debian 13+, Ubuntu 25.04+, Mint, Pop!_OS</h3>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.0/gnome-shell-extension-orrery_1.3.0-1_all.deb
+<span class="p">$ </span>sudo apt install ./gnome-shell-extension-orrery_1.3.0-1_all.deb</pre></div>
+        <div><h3>Arch, Manjaro, EndeavourOS</h3>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.0/gnome-shell-extension-orrery-1.3.0-1-any.pkg.tar.zst
+<span class="p">$ </span>sudo pacman -U gnome-shell-extension-orrery-1.3.0-1-any.pkg.tar.zst</pre></div>
+        <div><h3>Any distribution, just for you</h3>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.0/orrery@fqazzazee.github.io.shell-extension.zip
+<span class="p">$ </span>gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip</pre></div>
+      </div>
+      <p class="label" style="margin-top: 22px">then, after logging back in</p>
+<pre class="term"><span class="p">$ </span>gnome-extensions enable orrery@fqazzazee.github.io</pre>
+
+      <div class="split" style="margin-top: 50px" id="other">
+        <div>
+          <h3>Not on GNOME? KDE, XFCE, Cinnamon, MATE, Sway, Hyprland…</h3>
+          <p>Install <code>orrery-wallpaper</code> from the same release, in the same formats. It draws the
+            same solar system, without the clicking: as a wallpaper kept up to date with your desktop's
+            own tool, or as an animated background on Wayland compositors with layer-shell.</p>
+<pre class="term"><span class="c"># the wallpaper, redrawn every 10 minutes</span>
+<span class="p">$ </span>systemctl --user enable --now orrery-wallpaper
+
+<span class="c"># or animated (Sway, Hyprland, niri, labwc, river…)</span>
+<span class="p">$ </span>systemctl --user enable --now orrery-wallpaper-live
+
+<span class="c"># or just one picture, of any date</span>
+<span class="p">$ </span>orrery-wallpaper render voyager.png --date 1989-08-25</pre>
+        </div>
+        <div class="screen"><img src="screenshots/other-desktops.webp" width="1920" height="1080" loading="lazy"
+             alt="The picture orrery-wallpaper draws: the solar system today with the missions in flight and a fact card"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <p class="kicker">FAQ</p>
+      <h2>Questions people ask</h2>
+      <div class="faq">
+        <details>
+          <summary>How accurate is it?</summary>
+          <p>The planets come from JPL's orbital elements, good from 1800 to 2050; the asteroids and comets from JPL's Small-Body Database; the moons' positions from JPL Horizons. Each spacecraft's path meets every planet on the real date, and is checked against JPL's record of where it really went. Distances on screen are squeezed so everything fits, and the planets are drawn far bigger than to scale.</p>
+        </details>
+        <details>
+          <summary>Does it use a lot of power?</summary>
+          <p>It is built not to. It stops when windows cover the desktop, the overview is closed or the screen is locked; it slows to a few frames a second when nothing moves; it dims and slows after a few idle minutes; and on battery it lowers the frame rate and stops the spin. Planets move without redrawing, and each layer only redraws when it changes by most of a pixel.</p>
+        </details>
+        <details>
+          <summary>Will it burn in my OLED screen?</summary>
+          <p>Everything fades to true black, so most of the screen stays off. Pixel shift drifts the scene by a few pixels over time, the date and lists are dim, and the timeline only lights up while you use it.</p>
+        </details>
+        <details>
+          <summary>Which GNOME versions does it work on?</summary>
+          <p>GNOME 48, 49, 50 and 51. Each is tested by running Orrery in a real GNOME Shell of that version, in a container: loading it, flying in, zooming out, opening the overview and turning it off and on again.</p>
+        </details>
+        <details>
+          <summary>Can I still use desktop icons and the right-click menu?</summary>
+          <p>The right-click menu works as usual. A desktop-icons extension draws a window over the whole desktop, which takes the clicks Orrery would get; the solar system still shows and moves, but you cannot click it.</p>
+        </details>
+        <details>
+          <summary>Where is the music from?</summary>
+          <p>It is made up as it plays: slow chords, a low drone and soft bells in long echoes, never quite the same twice. Or point it at a folder of your own music. It starts muted, fades out behind windows and stops when the screen locks.</p>
+        </details>
+        <details>
+          <summary>It works on several monitors?</summary>
+          <p>The solar system fills the primary monitor; the others keep their wallpaper.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>Orrery is free software, under the <a href="https://github.com/fqazzazee/orrery/blob/main/LICENSE">GPL-2.0-or-later</a>.
+      Orbits from NASA JPL's Horizons and Small-Body Database.</div>
+    <div><a href="https://github.com/fqazzazee/orrery">GitHub</a> · <a href="https://buymeacoffee.com/fqazzazee">Buy me a coffee ☕</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
