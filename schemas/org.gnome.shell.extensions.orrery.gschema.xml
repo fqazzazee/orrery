@@ -9,7 +9,7 @@
       <summary>Replay the space age, or show the solar system as it is right now</summary>
     </key>
     <key name="replay-start-year" type="i">
-      <range min="1970" max="2025"/><default>1972</default>
+      <range min="1957" max="2025"/><default>1966</default>
     </key>
     <key name="days-per-second" type="d">
       <range min="0.5" max="400"/><default>12</default>
@@ -26,6 +26,21 @@
     <key name="seconds-per-earth-day" type="d">
       <range min="2" max="600"/><default>12</default>
       <summary>Spin speed: real seconds for one turn of the Earth; other planets spin in proportion</summary>
+    </key>
+
+    <!-- Tours -->
+    <key name="tour" type="s">
+      <choices><choice value="off"/><choice value="planets"/><choice value="stories"/><choice value="mission"/></choices>
+      <default>'off'</default>
+      <summary>A tour that starts by itself when the desktop sits untouched: flybys of the planets, every mission's story, or one mission's</summary>
+    </key>
+    <key name="tour-mission" type="s">
+      <default>'voyager1'</default>
+      <summary>The mission whose story the automatic tour tells</summary>
+    </key>
+    <key name="tour-idle-minutes" type="i">
+      <range min="0" max="120"/><default>5</default>
+      <summary>Minutes the desktop sits untouched before the automatic tour starts (0: right away)</summary>
     </key>
 
     <!-- View -->

@@ -5,11 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orrery — the solar system, live on your desktop</title>
-  <meta name="description" content="Orrery turns your Linux desktop into a live solar system: planets where they really are, 40 spacecraft on their real paths, moons, comets and the Oort cloud, drawn in pure black for OLED screens. A GNOME Shell extension for GNOME 48 to 51, with a companion for KDE, XFCE, Sway, Hyprland and more.">
+  <meta name="description" content="Orrery turns your Linux desktop into a live solar system: planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, drawn in pure black for OLED screens. A GNOME Shell extension for GNOME 48 to 51, with a companion for KDE, XFCE, Sway, Hyprland and more.">
   <meta name="theme-color" content="#000000">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Orrery — the solar system, live on your desktop">
-  <meta property="og:description" content="Planets where they really are, 40 spacecraft on their real paths, moons, comets and the Oort cloud, in pure OLED black. For GNOME, KDE, XFCE, Sway, Hyprland and more.">
+  <meta property="og:description" content="Planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, in pure OLED black. For GNOME, KDE, XFCE, Sway, Hyprland and more.">
   <meta property="og:url" content="https://fqazzazee.github.io/orrery/">
   <meta property="og:image" content="https://fqazzazee.github.io/orrery/social-preview.png">
   <meta property="og:image:width" content="1280">
@@ -73,7 +73,7 @@
       <b>pure black for OLED screens</b>. A <b>GNOME Shell extension</b>, with a companion for
       <b>KDE, XFCE, Cinnamon, Sway, Hyprland</b> and more.</p>
     <div class="actions">
-      <a class="button primary" href="#install">Install v1.3.3</a>
+      <a class="button primary" href="#install">Install v1.4.0</a>
       <a class="button" href="https://github.com/fqazzazee/orrery/releases/latest">Releases</a>
       <a class="button" href="https://github.com/fqazzazee/orrery">Source on GitHub</a>
     </div>
@@ -117,8 +117,8 @@
       <div class="features">
         <div class="feature" style="--c: var(--sun)"><span class="icon">☉</span><h3>Real positions</h3>
           <p>JPL's orbital elements put each planet where it was, or is. Uranus rolls on its side; Saturn's rings tilt as they really do.</p></div>
-        <div class="feature" style="--c: var(--voyager)"><span class="icon">✦</span><h3>40 spacecraft</h3>
-          <p>Mariner 10 to Dragonfly, on paths checked against JPL Horizons. Trails fade behind them; cards mark each flyby.</p></div>
+        <div class="feature" style="--c: var(--voyager)"><span class="icon">✦</span><h3>100+ spacecraft</h3>
+          <p>Mariner 2 to Dragonfly, Apollo to Artemis II, on paths checked against JPL Horizons. Cards mark each flyby and landing.</p></div>
         <div class="feature" style="--c: var(--saturn)"><span class="icon">◐</span><h3>Moons, comets, more</h3>
           <p>22 moons, Ceres and Vesta, Halley and interstellar 3I/ATLAS, the Lagrange points and Jupiter's Trojans.</p></div>
         <div class="feature" style="--c: var(--earth)"><span class="icon">⌕</span><h3>Fly in to a planet</h3>
@@ -133,15 +133,15 @@
           <p>The plane of the planets colored by how much sunlight falls there, with the habitable zone. It can follow your charger.</p></div>
         <div class="feature" style="--c: var(--uranus)"><span class="icon">♪</span><h3>Space music</h3>
           <p>A calm ambient piece made up as it plays, or your own folder of music, from a button on the timeline.</p></div>
-        <div class="feature" style="--c: var(--sun)"><span class="icon">▦</span><h3>In the overview too</h3>
-          <p>The Activities overview and workspace switches show the solar system, not the plain wallpaper.</p></div>
+        <div class="feature" style="--c: var(--sun)"><span class="icon">▶</span><h3>Mission stories</h3>
+          <p>Follow one spacecraft from launch to the end, flying in at every planet it passes, or let a tour play while you're away.</p></div>
         <div class="feature" style="--c: var(--voyager)"><span class="icon">☰</span><h3>Show and hide</h3>
           <p>A panel of chips on the timeline: orbits, names, moons, trails, and every mission one by one or all at once.</p></div>
         <div class="feature" style="--c: var(--mint)"><span class="icon">▪</span><h3>Kind to OLED and battery</h3>
           <p>Pure black, pixel shift, dimming when idle, pausing behind windows, slower on battery. <span class="dim">Nothing runs that cannot be seen.</span></p></div>
       </div>
       <div class="stats">
-        <div class="stat"><b>40</b><span>spacecraft and telescopes</span></div>
+        <div class="stat"><b>104</b><span>spacecraft and telescopes</span></div>
         <div class="stat"><b>22</b><span>moons, where they really are</span></div>
         <div class="stat"><b>1972–2500</b><span>on the timeline</span></div>
         <div class="stat"><b>400,000 AU</b><span>from the Sun to the edge of the view</span></div>
@@ -305,15 +305,15 @@
         out and back in and turn on Orrery in Extensions.</p>
       <div class="distros">
         <div><h3>Fedora, RHEL, openSUSE</h3>
-<pre class="term"><span class="p">$ </span>sudo dnf install https://github.com/fqazzazee/orrery/releases/download/v1.3.3/gnome-shell-extension-orrery-1.3.3-1.noarch.rpm</pre></div>
+<pre class="term"><span class="p">$ </span>sudo dnf install https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery-1.4.0-1.noarch.rpm</pre></div>
         <div><h3>Debian 13+, Ubuntu 25.04+, Mint, Pop!_OS</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.3/gnome-shell-extension-orrery_1.3.3-1_all.deb
-<span class="p">$ </span>sudo apt install ./gnome-shell-extension-orrery_1.3.3-1_all.deb</pre></div>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery_1.4.0-1_all.deb
+<span class="p">$ </span>sudo apt install ./gnome-shell-extension-orrery_1.4.0-1_all.deb</pre></div>
         <div><h3>Arch, Manjaro, EndeavourOS</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.3/gnome-shell-extension-orrery-1.3.3-1-any.pkg.tar.zst
-<span class="p">$ </span>sudo pacman -U gnome-shell-extension-orrery-1.3.3-1-any.pkg.tar.zst</pre></div>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery-1.4.0-1-any.pkg.tar.zst
+<span class="p">$ </span>sudo pacman -U gnome-shell-extension-orrery-1.4.0-1-any.pkg.tar.zst</pre></div>
         <div><h3>Any distribution, just for you</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.3.3/orrery@fqazzazee.github.io.shell-extension.zip
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/orrery@fqazzazee.github.io.shell-extension.zip
 <span class="p">$ </span>gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip</pre></div>
       </div>
       <p class="label" style="margin-top: 22px">then, after logging back in</p>

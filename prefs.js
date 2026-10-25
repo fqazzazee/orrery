@@ -104,7 +104,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 ['replay', 'Replay history'],
                 ['live', 'Live'],
             ], 'Replay runs the space age forward from the start year and loops; Live shows the solar system right now'),
-            this._spin('Replay starts in', 'replay-start-year', 1970, 2025, 1),
+            this._spin('Replay starts in', 'replay-start-year', 1957, 2025, 1),
             this._spin('Replay speed', 'days-per-second', 0.5, 400, 0.5,
                 'Simulated days per second. 12 makes a year pass in about 30 seconds', 1),
             this._switch('Carry on into the future', 'replay-into-future',
@@ -117,6 +117,25 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 'Seconds per turn of the Earth. Jupiter turns 2.4 times as fast; Venus takes 243 times as long, backwards'),
             'spin-planets'),
         ], 'Planets spin at their true speeds relative to each other, on their own slower clock so the fast ones do not blur.'));
+
+        const stories = MISSIONS.filter(m => m.group !== 'observatory')
+            .sort((a, b) => a.events[0].date.localeCompare(b.events[0].date));
+        const mission = this._combo('Mission', 'tour-mission', stories.map(m => [m.id, `${m.short ?? m.name} · ${m.events[0].date.slice(0, 4)}`]));
+        const syncMission = () => {
+            mission.sensitive = this._settings.get_string('tour') === 'mission';
+        };
+        syncMission();
+        this._watch('changed::tour', syncMission);
+        page.add(this._group('Tours', [
+            this._combo('Automatic tour', 'tour', [
+                ['off', 'Off'],
+                ['planets', 'Planet flybys'],
+                ['stories', 'Every story'],
+                ['mission', 'One story'],
+            ]),
+            mission,
+            this._spin('Starts after', 'tour-idle-minutes', 0, 120, 1, 'Minutes with the desktop untouched; 0 starts it right away'),
+        ], 'A tour flies in close to each planet in turn; a story follows one spacecraft from launch to the end, slowing down for every flyby. Touching the desktop stops an automatic tour. To start one now, use the panel on the timeline, or ▶ Story on a mission’s card.'));
         return page;
     }
 
@@ -347,6 +366,10 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 title: 'Spacecraft',
                 description: 'Each path is rebuilt from the real dates of its encounters (and the planned dates of those to come), checked against NASA JPL’s trajectories.',
             }),
+            moon: new Adw.PreferencesGroup({
+                title: 'To the Moon',
+                description: 'Landers, orbiters and crews, from Luna 9 and Apollo to Artemis. Up close to Earth they fly between Earth and the Moon.',
+            }),
             observatory: new Adw.PreferencesGroup({
                 title: 'Observatories',
                 description: 'Telescopes and Sun-watchers parked at the Lagrange points L1 and L2.',
@@ -367,8 +390,8 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._switch('Show missions', 'show-missions', 'Hide them all without losing the picks below'),
             allRow,
         ]));
-        for (const m of MISSIONS) {
-            const stops = m.events.filter(ev => (ev.kind === 'flyby' || ev.kind === 'arrive') && ev.at).map(ev => placeName(ev.at, true));
+        for (const m of [...MISSIONS].sort((a, b) => a.events[0].date.localeCompare(b.events[0].date))) {
+            const stops = m.events.filter(ev => ['flyby', 'arrive', 'land', 'end'].includes(ev.kind) && ev.at && ev.at !== 'earth').map(ev => placeName(ev.at, true));
             const route = stops.filter((n, i) => n !== stops[i - 1]).join(', ');
             const row = new Adw.SwitchRow({
                 title: m.name,
@@ -386,9 +409,10 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 if (list.join() !== this._settings.get_strv('disabled-missions').join())
                     this._settings.set_strv('disabled-missions', list);
             });
-            groups[m.group === 'observatory' ? 'observatory' : 'craft'].add(row);
+            groups[m.group ?? 'craft'].add(row);
         }
         page.add(groups.craft);
+        page.add(groups.moon);
         page.add(groups.observatory);
         return page;
     }

@@ -19,6 +19,10 @@ HORIZONS = {
     'messenger': '-236', 'newhorizons': '-98', 'dawn': '-203', 'juno': '-61', 'hayabusa2': '-37',
     'osirisrex': '-64', 'parker': None, 'bepicolombo': '-121', 'solarorbiter': '-144', 'lucy': '-49',
     'psyche': '-255', 'juice': '-28', 'europaclipper': '-159', 'hera': '-91',
+    'near': '-93', 'pathfinder': '-530', 'ds1': '-30', 'stardust': '-29', 'odyssey': '-53', 'hayabusa': '-130',
+    'mex': '-41', 'spirit': '-254', 'opportunity': '-253', 'deepimpact': '-140', 'mro': '-74', 'vex': '-248',
+    'phoenix': '-84', 'akatsuki': '-5', 'curiosity': '-76', 'mom': '-3', 'maven': '-202', 'tgo': '-143',
+    'insight': '-189', 'hope': '-62', 'tianwen1': '-9901491', 'perseverance': '-168',
 }
 STEP, MAX = 15, 40
 MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split()

@@ -23,6 +23,23 @@ else
     glib-compile-schemas $XDG_DATA_HOME/gnome-shell/extensions/orrery@fqazzazee.github.io/schemas
 fi
 cp -r /tester $XDG_DATA_HOME/gnome-shell/extensions/orrery-tester@local
+# Screenshots go through glycin, which sandboxes its image loaders with
+# bubblewrap; that cannot work in here, so run them as they are.
+cat > /usr/local/bin/bwrap <<'SHIM'
+#!/bin/bash
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --unshare-all|--die-with-parent|--clearenv|--new-session) shift ;;
+    --chdir|--dev|--tmpfs|--seccomp|--proc|--dir|--unsetenv) shift 2 ;;
+    --ro-bind|--ro-bind-try|--bind|--bind-try|--dev-bind|--setenv|--symlink) shift 3 ;;
+    --) shift; break ;;
+    --*) shift ;;
+    *) break ;;
+    esac
+done
+exec "$@"
+SHIM
+chmod +x /usr/local/bin/bwrap
 rm -f /out/*
 step gst-scan; (timeout 180 gst-inspect-1.0 >/dev/null 2>&1; echo "gst scan exit $?" >> /tmp/progress)
 step shell-starting; cp /tmp/progress /out/progress
@@ -32,7 +49,7 @@ gsettings set org.gnome.shell disable-extension-version-validation true
 gsettings set org.gnome.shell enabled-extensions "[\"orrery@fqazzazee.github.io\", \"orrery-tester@local\"]"
 gnome-shell --headless --wayland --no-x11 --virtual-monitor 1920x1080 --virtual-monitor 1280x1024 > /out/log.txt 2>&1 &
 PID=$!
-for i in $(seq 1 150); do [ -f /out/done ] && break; sleep 1; done
+for i in $(seq 1 260); do [ -f /out/done ] && break; sleep 1; done
 kill $PID; wait $PID 2>/dev/null' >/dev/null 2>&1
 cat /tmp/progress
 grep -E "ORRERY-TEST|JS ERROR|JS WARNING|TypeError|ReferenceError|SyntaxError|Orrery:" -A3 /out/log.txt | grep -v "^--$" | head -40

@@ -157,7 +157,8 @@ export function drawBodies(cr, view, jd, trajectories, {labels = true, moons = t
     const craft = [];
     for (const tr of trajectories) {
         const seg = tr.segmentAt(jd);
-        if (!seg || tr.mission.group === 'observatory')
+        // (Telescopes and Moon missions would sit on top of Earth.)
+        if (!seg || tr.mission.group)
             continue;
         let [x, y] = proj.project(seg.pos(jd));
         if (seg.kind === 'stay') {

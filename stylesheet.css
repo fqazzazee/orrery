@@ -466,6 +466,23 @@
     padding-top: 6px;
 }
 
+.orrery-panel-fold {
+    padding: 2px 0;
+    border-radius: 6px;
+}
+
+.orrery-panel-fold:hover .orrery-card-section-title {
+    color: rgba(225, 230, 245, 0.8);
+}
+
+.orrery-panel-scroll {
+    padding-right: 0;
+}
+
+.orrery-panel-scroll StScrollBar {
+    padding-left: 6px;
+}
+
 .orrery-panel-choice {
     spacing: 8px;
     padding-bottom: 6px;
@@ -521,4 +538,44 @@
 
 .orrery-chip.orrery-chip-on .orrery-chip-dot {
     opacity: 255;
+}
+
+/* Tours and stories: the bar at the top, and the way in from a card */
+
+.orrery-story {
+    background-color: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 99px;
+    padding: 2px 6px;
+    spacing: 8px;
+}
+
+.orrery-story-name {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: rgba(240, 244, 252, 0.9);
+}
+
+.orrery-story-step {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 9pt;
+    color: rgba(200, 206, 225, 0.6);
+}
+
+.orrery-pill.orrery-story-button {
+    margin-right: 4px;
+}
+
+.orrery-chip.orrery-tour-chip {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8.5pt;
+    color: rgba(240, 244, 252, 0.85);
+}
+
+.orrery-panel-hint {
+    font-family: Outfit, Cantarell, sans-serif;
+    font-size: 8pt;
+    color: rgba(200, 206, 225, 0.42);
+    padding: 4px 0 2px;
 }

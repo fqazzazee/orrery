@@ -22,7 +22,7 @@ A live solar system as your wallpaper. Every planet sits where it really is, and
 
 ## What it does
 
-An orrery is the old clockwork model of the solar system. This one runs on real astronomy. The planets follow NASA JPL's orbits and turn the way they really face, so Earth's day side matches the time on screen. Forty spacecraft and telescopes, from Mariner 10 in 1973 to Dragonfly on its way to Titan, follow paths fitted to JPL's record of where they went. The ones still flying follow their published plans.
+An orrery is the old clockwork model of the solar system. This one runs on real astronomy. The planets follow NASA JPL's orbits and turn the way they really face, so Earth's day side matches the time on screen. Over a hundred spacecraft and telescopes, from Mariner 2 in 1962 and the Apollo flights to Dragonfly on its way to Titan, follow paths fitted to JPL's record of where they went. The ones still flying follow their published plans.
 
 Leave it running and it shows the solar system right now. Or play with it:
 
@@ -91,20 +91,28 @@ The Activities overview and workspace switches show the solar system, still movi
 - **Relative speeds.** Planets orbit at their true relative speeds. They also spin at their true speeds relative to each other, on a slower clock so Jupiter's 10-hour day does not blur.
 - **The space age, replayed, and what is coming.**
   - **Flown:** 21 spacecraft fly the gravity assists they really flew, on the real dates: Mariner 10, Pioneer 10 and 11, both Voyagers, Giotto, Galileo, Ulysses, Cassini, Rosetta, MESSENGER, New Horizons, Dawn, Juno, Hayabusa2, OSIRIS-REx/APEX, Parker Solar Probe, BepiColombo, Solar Orbiter, DART and Lucy.
+  - **Orbiters, landers and comet chasers:** 35 more, from Mariner 2, the Veneras and the Vikings to Magellan, NEAR, Stardust, Deep Impact, the Mars rovers, MRO, MAVEN, Hope, Tianwen-1 and Perseverance, on paths fitted to JPL Horizons.
+  - **To the Moon:** 29 missions, from Luna 9 and Apollo 8 to Chang'e 6, Blue Ghost and Artemis II. They fly in Earth's close-up: free returns around the far side, lunar orbits, landings and liftoffs, CAPSTONE's halo orbit and the long looping routes of GRAIL, Danuri and SLIM.
   - **Planned:** missions on their way fly their planned routes into the 2030s: Psyche, Juice, Europa Clipper, Hera, Tianwen-2, ESCAPADE, MMX and Dragonfly.
   - **At L1 and L2:** telescopes and Sun-watchers sit there: SOHO, WMAP, Herschel, Planck, Gaia, JWST, Euclid, Aditya-L1, IMAP, Roman and PLATO.
   - A card pops up at each launch, flyby and arrival.
+- **Stories and tours.**
+  - Press **▶ Story** on a mission's card to follow only that spacecraft from launch to the end. It cruises between encounters, flies in to each planet it passes to watch the swing-by up close, and heads out past the planets with the Voyagers. A bar at the top steps back and forward or exits.
+  - The panel's **Tours** fly past every planet in turn, or play every mission's story one after another.
+  - **Automatic tour** (in the preferences) starts planet flybys, every story, or one mission's story after the desktop has sat untouched for a few minutes, and stops as soon as you're back.
 - **Moons, asteroids, comets and Lagrange points.**
-  - The 22 biggest moons circle their planets on a squeezed scale (our Moon at its real phase).
+  - The 22 biggest moons circle their planets on a squeezed scale (our Moon where it really is, at its real phase).
   - Ceres and Vesta have their own orbits.
   - Halley's Comet and the interstellar comet 3I/ATLAS grow tails near the Sun.
-  - The asteroids missions visit (Bennu, Ryugu, Apophis, Didymos, the Lucy Trojans, Arrokoth and more) appear while the craft are there.
+  - The asteroids and comets missions visit (Gaspra, Ida, Eros, Itokawa, Tempel 1, Bennu, Ryugu, Didymos, the Lucy Trojans, Arrokoth and more) appear while the craft are there.
   - Markers show the Sun–Earth Lagrange points, and a swarm of dots shows Jupiter's Trojans.
 - **Fact cards.** Live numbers for the date on screen: distance from the Sun and from Earth, light and radio delay, orbital speed right now, and how long the trip would take by car, airliner or spacecraft. They rotate with trivia about each world.
 - **Live mode.** Shows the solar system right now. Voyager 1 is about 172 AU out and nearing one light-day from Earth.
 - **Up close.**
   - Double-click a planet, scroll the wheel over it, or press the zoom button on its card to fly in. The planet fills the middle, turned the way it really faces, with its moons where they really are (from JPL Horizons).
   - **Earth:** the ISS, Hubble, Tiangong, the GPS and Starlink constellations and the geostationary belt, with the Moon, L1 and L2 farther out.
+  - **Moon missions** fly out to the Moon and back, with landers sitting where they touched down.
+  - **Flybys:** craft passing a planet swing by on the curve that really bent their course; Voyager 1 skims Jupiter at about 5 of its radii.
   - **Elsewhere:** Mars's orbiters and rovers, Venus's orbiters and Venera landers, Juno at Jupiter, Cassini at Saturn and BepiColombo at Mercury.
   - **Scale:** true near the planet, logarithmic farther out.
   - **Time:** runs at the planet's own pace, a thousand or so times real speed, with the clock in UTC. Pause it and the date holds while the moons and satellites keep circling (as long as the spin is on).
@@ -121,11 +129,11 @@ The Activities overview and workspace switches show the solar system, still movi
   - Right-click still opens the usual desktop menu.
 - **Timeline.**
   - A scrubber with a tick for every launch, flyby and arrival, out to the planned ones in the 2030s. Drag or scroll it to move through time, and click a tick to jump to that event.
-  - **Controls:** play/pause, slower/faster and **Now**. Click the playhead (or middle-click anywhere on the bar) to pause or play. At the end, the speaker steps the music through its modes, and the list button opens the panel.
+  - **Controls:** play/pause, slower/faster and **Now**. Click the playhead (or middle-click anywhere on the bar) to pause or play. At the end come zoom, the planets' spin, the ☀ sunlight view, the speaker (it steps the music through its modes) and the list button that opens the panel.
   - **Placement:** top or bottom, centered or in a corner; whatever shares its corner moves aside.
   - It appears when the pointer is on the desktop and fades away after a few seconds.
 - **Show and hide from the desktop.**
-  - The list button on the timeline opens a panel. It starts with the modes: **Music** and **Animation** (each Muted or Paused, Background only, or Continuous), the planets' spin and the sunlight view. Then come chips for orbits, names, stars, belts, moons, comets, Lagrange points, trails and fact cards, and for every spacecraft and telescope.
+  - The list button on the timeline opens a panel. It starts with the tours and the modes: **Music** and **Animation** (each Muted or Paused, Background only, or Continuous). Then come chips for orbits, names, stars, belts, moons, comets, Lagrange points, trails and fact cards, and for every spacecraft, Moon mission and telescope.
   - Each group has **All** and **None**, and a switch hides or shows all missions at once.
   - **Settings…** in the panel opens the preferences.
 - **Music.** A slow ambient piece made up as it plays (drifting chords, a low drone, soft bells in long echoes), or your own music from a folder, shuffled. The speaker on the timeline steps through **Muted**, **Background only** (it fades out while windows cover the desktop) and **Continuous**. It always stops when the screen locks.
@@ -137,7 +145,7 @@ The Activities overview and workspace switches show the solar system, still movi
 
 ## Status
 
-Stable: [v1.3.3](https://github.com/fqazzazee/orrery/releases/tag/v1.3.3) is the latest release.
+Stable: [v1.4.0](https://github.com/fqazzazee/orrery/releases/tag/v1.4.0) is the latest release.
 
 - **GNOME:** tested in a real GNOME Shell on 48, 49, 50 and 51, each in a container, both from source and from the installed RPM and DEB packages.
 - **Other desktops:** the `orrery-wallpaper` companion's live background is tested in Sway, and its pictures render on Fedora, Debian and Arch.
@@ -158,7 +166,7 @@ The GNOME extension stays the main version, and both will share the same astrono
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
 ```bash
-v=1.3.3   # the release's version
+v=1.4.0   # the release's version
 url=https://github.com/fqazzazee/orrery/releases/download/v$v
 # Fedora, RHEL, openSUSE (zypper install works the same)
 sudo dnf install $url/gnome-shell-extension-orrery-$v-1.noarch.rpm
@@ -235,7 +243,7 @@ make dist                    # build the zip and the rpm, deb and Arch packages 
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
-To release, push a tag like `v1.3.3` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
+To release, push a tag like `v1.4.0` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
 
 The project page lives in [`docs/`](docs). Its screenshots and clips were recorded from the extension itself, running in a headless GNOME Shell.
 

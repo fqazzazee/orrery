@@ -12,6 +12,7 @@ import {sunlightColor} from '../lib/render.js';
 import {migrateSettings} from '../lib/settings.js';
 import {GM} from '../lib/bodies.js';
 import {SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
+import {TOUR_PLANETS, planSpan, planetTour, storyPlan} from '../lib/tour.js';
 
 let failed = 0;
 function check(ok, name) {
@@ -65,7 +66,7 @@ const s1 = Astro.jd('1980-11-12'), s2 = Astro.jd('2012-08-25');
 lambertCase('Voyager 1 Saturn->heliopause', Astro.planetPosition('saturn', s1), Astro.fromLonLat(255.7, 34.8, 121.6), s2 - s1, 0, 0);
 
 // Missions: every trajectory meets each body on the encounter date.
-for (const tr of buildTrajectories()) {
+for (const tr of buildTrajectories().filter(x => !x.lunar)) {
     let worst = 0;
     for (const ev of tr.events.filter(e => e.at && e.kind !== 'launch' && e.kind !== 'end')) {
         const p = tr.position(ev.t - 1e-4) ?? tr.position(ev.t);
@@ -74,6 +75,22 @@ for (const tr of buildTrajectories()) {
     check(worst < 2e-3, `${tr.mission.name} meets every flyby target (worst ${worst.toExponential(1)} AU)`);
     check(tr.segments.every(s => s.kind !== 'fly' || s.hop || Math.abs(s.orbit.e - 1) > 1e-3), `${tr.mission.name} has no degenerate legs`);
 }
+// Moon missions: at the Moon for each lunar event, home for splashdown,
+// and the Moon itself where it really was.
+for (const tr of buildTrajectories().filter(x => x.lunar)) {
+    let worst = 0;
+    for (const ev of tr.events.filter(e => e.at === 'moon')) {
+        const g = tr.geo(Math.min(ev.t, tr.end - 1e-6));
+        worst = Math.max(worst, Astro.norm(Astro.sub(g, Astro.moonPosition(ev.t))));
+    }
+    const home = tr.events.find(e => e.kind === 'end' && e.at === 'earth');
+    const landed = home ? Astro.norm(tr.geo(home.t - 1e-4)) : 0;
+    check(worst < 25000 && landed < 7000, `${tr.mission.name} meets the Moon (worst ${(worst / 1000).toFixed(1)}k km) and gets home`);
+}
+check(near(Astro.moonPhase(Astro.jd('2024-04-08 18:17')).age, 0, 0.01) || near(Astro.moonPhase(Astro.jd('2024-04-08 18:17')).age, 1, 0.01),
+    'new moon at the eclipse of 8 April 2024');
+check(near(Astro.norm(Astro.moonPosition(Astro.jd('2024-04-08 18:17'))), 360000, 3000), 'the Moon near perigee then');
+check(near(Astro.jd('1969-07-20 20:17') - Astro.jd('1969-07-20'), (20 * 60 + 17 - 12 * 60) / 1440, 1e-6), 'dates with a time of day');
 {
     const parker = buildTrajectories().find(t => t.mission.id === 'parker');
     const tp = Astro.jd('2024-12-24');
@@ -253,6 +270,43 @@ check(near(Astro.inclinationDeg(Astro.planetOrbit('mercury', Astro.J2000)), 7.0,
         migrateSettings(s);
         check(s.get_string('music-mode') === 'muted', 'and only once');
     }
+}
+
+// Tours and stories: steps that move forward in time, take a sensible
+// while, and fly in close at each planet a mission passes.
+{
+    const tour = planetTour();
+    check(TOUR_PLANETS.every(id => tour.some(s => s.view === id)), 'the planet tour visits every planet');
+    let bad = [];
+    for (const tr of buildTrajectories().filter(x => x.mission.group !== 'observatory')) {
+        const steps = storyPlan(tr);
+        let t = tr.launch - 10, ok = steps.length > 1;
+        for (const s of steps) {
+            if (s.from !== undefined)
+                t = s.from;
+            if (s.to !== undefined) {
+                ok &&= isFinite(s.to) && s.to >= t - 1e-6;
+                t = s.to;
+            }
+            ok &&= s.seconds > 0 && s.seconds <= 30 && !!s.title && !!s.view && isFinite(s.from);
+        }
+        const total = steps.reduce((sum, s) => sum + s.seconds, 0);
+        ok &&= total < 600;
+        if (!tr.lunar) {
+            const planets = tr.milestones.filter(ev => ev.kind === 'flyby' && BODIES.some(b => b.id === ev.at && b.id !== 'sun' && GM[b.id]) && ev.t > tr.launch + 5);
+            ok &&= planets.every(ev => steps.some(s => s.view === ev.at));
+        } else {
+            ok &&= steps.every(s => s.view === 'earth');
+        }
+        const [lo, hi] = planSpan(steps, tr.launch);
+        ok &&= lo <= tr.launch && hi > tr.launch;
+        if (!ok)
+            bad.push(tr.mission.id);
+    }
+    check(!bad.length, `every mission has a story that plays forward${bad.length ? ` (not ${bad.join(', ')})` : ''}`);
+    const v1 = storyPlan(buildTrajectories().find(x => x.mission.id === 'voyager1'));
+    check(v1.some(s => s.view === 'jupiter') && v1.some(s => s.view === 'saturn') && v1.some(s => s.view === 'far'),
+        'Voyager 1’s story: Jupiter, Saturn, then out past the planets');
 }
 
 print(failed ? `\n${failed} failed` : '\nall passed');

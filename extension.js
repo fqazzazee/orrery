@@ -21,7 +21,8 @@ import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
 import * as Render from './lib/render.js';
 import {MUSIC_MODES, migrateSettings, nextMode} from './lib/settings.js';
-import {Card, LayersPanel, Timeline, label} from './lib/ui.js';
+import {planSpan, planetTour, storyPlan} from './lib/tour.js';
+import {Card, LayersPanel, StoryBar, Timeline, label} from './lib/ui.js';
 
 const RELAYOUT_KEYS = ['other-monitors', 'distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
     'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts',
@@ -55,6 +56,7 @@ const FOCUS_MS = 750;
 const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
 const IDLE_FPS = 10;
 const STILL_FPS = 5;
+const TOUR_KEYS = ['tour', 'tour-mission', 'tour-idle-minutes'];
 
 const smooth = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -203,6 +205,8 @@ class OrreryScene {
         // Days the moons (and satellites, up close) have run on while the
         // date was paused; they keep turning as long as the spin is on.
         this._drift = 0;
+        this._tour = null;            // a tour or story playing, see lib/tour.js
+        this._storyOnly = null;       // the one mission a story shows
         this.powerSaving = false;
         this.onActivity = null;
         this.musicState = 'hidden';   // for the timeline's music button: a music-mode, or hidden
@@ -259,6 +263,7 @@ class OrreryScene {
         this._dateBox.destroy();
         this._missionBox.destroy();
         this._backButton.destroy();
+        this._storyBar.destroy();
         this._hud.destroy();
         this._far.destroy();
         this._hoverPath.destroy();
@@ -282,6 +287,7 @@ class OrreryScene {
         this._dateBox = null;
         this._missionBox = null;
         this._backButton = null;
+        this._storyBar = null;
         this._hud = null;
         this._far = null;
         this._hoverPath = null;
@@ -319,7 +325,8 @@ class OrreryScene {
     }
 
     _startJd() {
-        return Astro.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
+        const t = Astro.jd(`${this._settings.get_int('replay-start-year')}-01-01`);
+        return this._tour ? Math.min(t, this._tour.start) : t;
     }
 
     // Far enough ahead to take in every planned mission event.
@@ -348,6 +355,12 @@ class OrreryScene {
     }
 
     _advance(dt) {
+        if (this._tour) {
+            // A tour keeps its own time, up to the end of each step.
+            const to = this._tour.steps[this._tour.index]?.to;
+            this._jd = Math.min(this._endJd(), to ?? Infinity, this._jd + dt * this._dps());
+            return;
+        }
         const s = this._settings;
         const now = Astro.jdNow();
         if (this._live() && !this._browsing) {
@@ -397,6 +410,8 @@ class OrreryScene {
 
     // Is the date on screen moving fast enough to see?
     _timeRuns() {
+        if (this._tour)
+            return this._dps() > 0;
         if (this._live() && !this._browsing)
             return false;
         return this._playing && !this._timeline.dragging &&
@@ -478,6 +493,13 @@ class OrreryScene {
     }
 
     _togglePlay() {
+        if (this._tour) {
+            this._tour.paused = !this._tour.paused;
+            this._playing = !this._tour.paused;
+            this._syncTimelineState();
+            this._updateHud();
+            return;
+        }
         if (this._live() && !this._browsing) {
             // Pausing live time means looking at this moment for a while.
             this._browsing = true;
@@ -542,7 +564,8 @@ class OrreryScene {
 
     _buildTrajectories() {
         const disabled = this._settings.get_strv('disabled-missions');
-        this._trajectories = buildTrajectories(MISSIONS.filter(m => !disabled.includes(m.id)));
+        // (A story shows its mission alone, even one turned off.)
+        this._trajectories = buildTrajectories(MISSIONS.filter(m => this._storyOnly ? m.id === this._storyOnly : !disabled.includes(m.id)));
         this._events = this._trajectories.flatMap(tr => tr.milestones).sort((a, b) => a.t - b.t);
         const horizon = this._endJd() + 365.25;
         for (const tr of this._trajectories) {
@@ -909,6 +932,7 @@ class OrreryScene {
     // The mouse wheel zooms smoothly; past the planets it flies to the one
     // under the pointer.
     _wheel(steps, x, y) {
+        this._tourYield();
         if (steps < 0 && this._focus) {
             this._leaveFocus();
             return;
@@ -1007,8 +1031,217 @@ class OrreryScene {
         this._refreshFact();
     }
 
+    // ---- Tours and stories ----
+
+    // kind: 'planets' (fly past each planet), 'story' (one mission, from
+    // launch to the end) or 'stories' (each mission's in turn). An automatic
+    // tour (started after the desktop sits untouched) loops, and stops at
+    // the first touch.
+    startTour(kind, missionId = null, {auto = false} = {}) {
+        if (this._tour)
+            this._endTour(false);
+        const ids = kind === 'stories' ? this._storyIds(missionId) : [missionId];
+        if (kind !== 'planets' && !ids[0])
+            return;
+        this._tour = {
+            kind, auto, ids, which: 0, steps: [], index: -1, clock: 0, dps: null, start: Infinity,
+            saved: {jd: this._jd, playing: this._playing, zoom: this._zoomTarget, focus: this._focus?.id ?? null,
+                browsing: this._browsing, expanded: this._pin?.expanded,
+                selected: this._selected?.tr ? {mission: this._selected.tr.mission.id} : this._selected},
+        };
+        if (this._panel.isOpen)
+            this._togglePanel(false);
+        this._loadTour();
+    }
+
+    // Missions with a story, in launch order, from the given one on.
+    _storyIds(from = null) {
+        const disabled = this._settings.get_strv('disabled-missions');
+        const ids = MISSIONS.filter(m => m.group !== 'observatory' && !disabled.includes(m.id))
+            .sort((a, b) => Astro.jd(a.events[0].date) - Astro.jd(b.events[0].date)).map(m => m.id);
+        const i = Math.max(0, ids.indexOf(from));
+        return [...ids.slice(i), ...ids.slice(0, i)];
+    }
+
+    _loadTour() {
+        const tour = this._tour;
+        let steps;
+        if (tour.kind === 'planets') {
+            this._setStoryOnly(null);
+            steps = planetTour();
+            tour.name = 'Planet flybys';
+        } else {
+            const id = tour.ids[tour.which % tour.ids.length];
+            this._setStoryOnly(id);
+            const tr = this._trajectories[0];
+            if (!tr) {
+                this._endTour();
+                return;
+            }
+            steps = storyPlan(tr);
+            for (const step of steps) {
+                if (step.pick)
+                    step.pick = {tr};
+            }
+            tour.name = tr.mission.short ?? tr.mission.name;
+        }
+        tour.steps = steps;
+        tour.start = Math.min(planSpan(steps, this._jd)[0], this._jd) - 30;
+        if (this._live())
+            this._browsing = true;
+        this._playing = true;
+        this._timelineRange();
+        // (An automatic tour is to watch, not to steer: no bar.)
+        if (!tour.auto)
+            this._storyBar.show(tour.name);
+        this._tourStep(0);
+    }
+
+    // Only this mission on screen (null: the usual ones).
+    _setStoryOnly(id) {
+        if (id === this._storyOnly)
+            return;
+        this._storyOnly = id;
+        this.onSettingChanged('disabled-missions');
+    }
+
+    _tourStep(i) {
+        const tour = this._tour;
+        const step = tour.steps[i];
+        tour.index = i;
+        tour.clock = 0;
+        if (step.from !== undefined && Math.abs(step.from - this._jd) > 1e-4)
+            this._tourSeek(step.from);
+        tour.dps = step.to !== undefined ? Math.max(0, (step.to - this._jd) / step.seconds) : step.dps ?? null;
+        if (step.view === 'system' || step.view === 'far') {
+            if (this._focus)
+                this._leaveFocus();
+            this._zoomTarget = step.zoom ?? (step.view === 'far' ? 0.6 : 0);
+        } else if (this._focus?.id !== step.view) {
+            this._focusOn(step.view);
+        }
+        if (step.pick && !sameSubject(step.pick, this._selected))
+            this._select(step.pick);
+        this._storyBar.setStep(step.title, i, tour.steps.length);
+        this._syncTimelineState();
+        this._updateHud();
+    }
+
+    // Jump within a tour: no clamping to the replay's range, no lingering cards.
+    _tourSeek(t) {
+        for (const c of this._eventCards)
+            c.card.dismiss();
+        this._eventCards = [];
+        this._jd = t;
+        this._drift = 0;
+        this._seekEvents();
+        this._updateAll(0);
+    }
+
+    _updateTour(dt) {
+        const tour = this._tour;
+        if (!tour) {
+            // Start the automatic tour once the desktop has sat untouched.
+            const kind = this._settings.get_string('tour');
+            if (kind !== 'off' && this._proj && !this._timeline.dragging && !this._panel.isOpen &&
+                this._realTime - Math.max(0, this._lastActivity, this._tourRest ?? 0) > this._settings.get_int('tour-idle-minutes') * 60 + 2)
+                this.startTour(kind === 'mission' ? 'story' : kind, this._settings.get_string('tour-mission') || null, {auto: true});
+            return;
+        }
+        const step = tour.steps[tour.index];
+        if (tour.paused)
+            return;
+        tour.clock += dt;
+        const done = step.to !== undefined ? this._jd >= step.to - 1e-9 || tour.clock > step.seconds * 1.5 + 3 : tour.clock >= step.seconds;
+        if (done)
+            this._nextTourStep();
+    }
+
+    _nextTourStep() {
+        const tour = this._tour;
+        if (tour.index + 1 < tour.steps.length) {
+            this._tourStep(tour.index + 1);
+            return;
+        }
+        // The end: on to the next story, round again, or back to before.
+        if (tour.kind === 'stories' && (tour.auto || tour.which + 1 < tour.ids.length)) {
+            tour.which++;
+            this._loadTour();
+        } else if (tour.auto) {
+            this._loadTour();
+        } else {
+            this._endTour();
+        }
+    }
+
+    _prevTourStep() {
+        const tour = this._tour;
+        // Back to the start of this step, or of the one before if just begun.
+        let i = tour.clock < 2 ? Math.max(0, tour.index - 1) : tour.index;
+        // A step that runs on from where the last one stopped needs a date
+        // to start from: the end of the step before it.
+        const startOf = k => {
+            for (let j = k; j >= 0; j--) {
+                if (tour.steps[j].from !== undefined)
+                    return tour.steps[j].from;
+                if (j < k && tour.steps[j].to !== undefined)
+                    return tour.steps[j].to;
+            }
+            return this._jd;
+        };
+        while (i > 0 && tour.steps[i].to === undefined && tour.steps[i].from === undefined)
+            i--;
+        this._tourSeek(startOf(i));
+        this._tourStep(i);
+    }
+
+    // Stop, and put things back as they were.
+    _endTour(restore = true) {
+        const tour = this._tour;
+        if (!tour)
+            return;
+        this._tour = null;
+        this._storyBar.hide();
+        this._setStoryOnly(null);
+        if (restore) {
+            const {saved} = tour;
+            if (saved.focus)
+                this._focusOn(saved.focus);
+            else if (this._focus)
+                this._leaveFocus();
+            this._zoomTarget = saved.zoom;
+            this._browsing = saved.browsing;
+            if (this._live() && !saved.browsing)
+                this._goNow();
+            else
+                this._seek(saved.jd);
+            this._playing = saved.playing;
+            const tr = saved.selected?.mission && this._trajectories.find(x => x.mission.id === saved.selected.mission);
+            const subject = tr ? {tr} : saved.selected?.id ? saved.selected : null;
+            if (subject)
+                this._select(subject, {expand: saved.expanded});
+            else if (this._selected)
+                this._deselect();
+        }
+        // Wait a while before an automatic tour starts again.
+        this._tourRest = this._realTime;
+        this._timelineRange();
+        this._syncTimelineState();
+        this._updateHud();
+    }
+
+    // Someone took the controls: a tour gives way.
+    _tourYield() {
+        if (this._tour)
+            this._endTour(this._tour.auto);
+    }
+
     // Simulated days per real second, for the view on screen.
     _dps() {
+        if (this._tour?.paused)
+            return 0;
+        if (this._tour?.dps !== null && this._tour?.dps !== undefined)
+            return this._tour.dps;
         if (this._focus)
             return this._focus.rate * this._focusMul / Astro.DAY_S;
         const dps = this._settings.get_double('days-per-second');
@@ -1018,6 +1251,8 @@ class OrreryScene {
     }
 
     _speedText() {
+        if (this._focus && this._tour?.dps !== null && this._tour?.dps !== undefined)
+            return `×${Astro.formatCount(Math.round(this._tour.dps * Astro.DAY_S))}`;
         if (this._focus)
             return `×${Astro.formatCount(Math.round(this._focus.rate * this._focusMul))}`;
         // Two figures at most, so it holds still while the view zooms.
@@ -1059,17 +1294,32 @@ class OrreryScene {
         this._hud.add_child(this._legend);
 
         this._timeline = new Timeline(this._hud, {
-            seek: (t, done, ev) => this._seek(t, done, ev),
+            seek: (t, done, ev) => {
+                this._tourYield();
+                this._seek(t, done, ev);
+            },
             toggle: () => this._togglePlay(),
             restart: () => {
+                this._tourYield();
                 this._playing = true;
                 this._seek(this._startJd());
                 this._syncTimelineState();
             },
-            speed: dir => this._changeSpeed(dir),
-            now: () => this._goNow(),
-            zoom: dir => this._zoom(dir),
+            speed: dir => {
+                this._tourYield();
+                this._changeSpeed(dir);
+            },
+            now: () => {
+                this._tourYield();
+                this._goNow();
+            },
+            zoom: dir => {
+                this._tourYield();
+                this._zoom(dir);
+            },
             layers: () => this._togglePanel(),
+            spin: () => this._toggleSpin(),
+            sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
             music: () => this.onMusicToggle?.(),
             hover: h => this._timelineHover(h),
             activity: () => this._activity(),
@@ -1083,7 +1333,7 @@ class OrreryScene {
         // Chips to show and hide things and missions, from the timeline.
         this._panel = new LayersPanel(this._hud, {
             settings: this._settings, missions: MISSIONS,
-            spin: {isOn: () => this._spinning(), toggle: () => this._toggleSpin()},
+            onTour: kind => this.startTour(kind, kind === 'stories' ? this._selected?.tr?.mission.id ?? null : null),
             onPrefs: () => {
                 this._togglePanel(false);
                 this.onOpenPrefs?.();
@@ -1103,6 +1353,15 @@ class OrreryScene {
             this._syncTimelineState();
         }, this);
         this._hud.add_child(this._backButton);
+
+        // A story's controls, in the same place.
+        this._storyBar = new StoryBar(this._hud, {
+            onPrev: () => this._tour && this._prevTourStep(),
+            onNext: () => this._tour && this._nextTourStep(),
+            onExit: () => this._endTour(),
+            onResize: () => this._placeStoryBar(),
+            activity: () => this._tour?.auto || this._activity(),
+        });
 
         // One tooltip, shared by the scene and the timeline.
         this._tooltip = label('orrery-tooltip');
@@ -1152,8 +1411,9 @@ class OrreryScene {
         };
         this._dateBox.set_position(left + m, this._slots.dateTop);
         const bw = this._backButton.get_preferred_width(-1)[1];
-        this._backButton.set_position(Math.round((left + right - bw) / 2),
-            on && atTop && side === 'center' ? ty + th + gap : top + Math.round(m * 0.6));
+        this._topY = on && atTop && side === 'center' ? ty + th + gap : top + Math.round(m * 0.6);
+        this._backButton.set_position(Math.round((left + right - bw) / 2), this._topY);
+        this._placeStoryBar();
         this._timelineRange();
         if (mode === 'always')
             this._timeline.show();
@@ -1186,6 +1446,14 @@ class OrreryScene {
         this._syncTimelineState();
     }
 
+    _placeStoryBar() {
+        if (!this._storyBar || this._topY === undefined)
+            return;
+        const {left, right} = this._area;
+        const w = this._storyBar.actor.get_preferred_width(-1)[1];
+        this._storyBar.actor.set_position(Math.round((left + right - w) / 2), this._topY);
+    }
+
     _timelineRange() {
         const t0 = this._startJd(), now = Astro.jdNow(), t1 = this._endJd();
         const y0 = Astro.yearOfJd(t0), y1 = Astro.yearOfJd(t1);
@@ -1206,7 +1474,7 @@ class OrreryScene {
     }
 
     _syncTimelineState() {
-        this._backButton?.set({visible: !!this._focus || this._zoomTarget > 0.01,
+        this._backButton?.set({visible: !this._tour && (!!this._focus || this._zoomTarget > 0.01),
             label: this._focus ? '‹  Back to the solar system' : '‹  Back to the planets'});
         this._timeline.setState({
             playing: this._live() && !this._browsing ? true : this._playing,
@@ -1215,10 +1483,10 @@ class OrreryScene {
             live: this._live() && !this._browsing,
             music: this.musicState,
             layers: this._panel?.isOpen,
+            spinning: this._spinning(),
+            spinHeld: this._settings.get_boolean('spin-planets') && !this._spinning(),
+            sunlight: this._settings.get_boolean('sunlight-view'),
         });
-        // The spin chip: battery saver can hold it off.
-        if (this._panel?.isOpen)
-            this._panel.sync();
     }
 
     _updateHud() {
@@ -1233,7 +1501,10 @@ class OrreryScene {
         const today = Math.abs(this._jd - now) < 0.5;
         const dps = +s.get_double('days-per-second').toFixed(1);
         let caption;
-        if (this._focus)
+        if (this._tour) {
+            const step = this._tour.steps[this._tour.index];
+            caption = `${this._tour.auto ? 'Tour · ' : ''}${this._tour.name} · ${step?.title ?? ''}${this._tour.paused ? ' · paused' : ` · ${this._speedText()}`}`;
+        } else if (this._focus)
             caption = `${BODY[this._focus.id].name} up close · ${this._speedText()} real speed${this._playing ? ''
                 : this._spinning() ? ' · date paused, orbits still turning' : ' · paused'}`;
         else if (this._isFar)
@@ -1462,6 +1733,7 @@ class OrreryScene {
             this._applyCamera();
         }
         this._advance(dt);
+        this._updateTour(dt);
         this._updateAll(dt);
         if (this._timelineMode === 'auto' && this._timeline.shown && !this.interacting && !this._timeline.actor.hover && !this._panel.isOpen)
             this._timeline.hide();
@@ -1574,10 +1846,8 @@ class OrreryScene {
         for (const m of b.moons) {
             let a;
             if (m.id === 'moon') {
-                // Our Moon sits where it really is: its phase sets its angle
-                // from the Sun as seen from Earth.
-                const sunLon = Astro.longitudeDeg(Astro.scale(b.pos, -1)) * Math.PI / 180;
-                a = sunLon + 2 * Math.PI * Astro.moonPhase(this._jd + this._drift).age;
+                // Our Moon sits where it really is.
+                a = Astro.moonAngle(m.data, this._jd + this._drift);
             } else {
                 a = m.phase0 + 2 * Math.PI * this._moonClock / (Math.abs(m.data.period) * spinDay) * Math.sign(m.data.period);
             }
@@ -1757,6 +2027,8 @@ class OrreryScene {
                 const ang = this._realTime * 2 * Math.PI / 6 + 2 * Math.PI * hashUnit(tr.mission.id);
                 const rr = (b?.R ?? 2) + (LPOINT[seg.body] ? 2 + 3 * hashUnit(`${tr.mission.id}r`) : 5);
                 [x, y] = [(b?.x ?? 0) + rr * Math.cos(ang), (b?.y ?? 0) + rr * Math.sin(ang) * 0.55];
+            } else if (tr.lunar) {
+                [x, y] = this._lunarSpot(tr);
             } else if (seg.hop) {
                 // Short trips near a planet slide between the places as drawn,
                 // since L1 and L2 are drawn away from their true spots.
@@ -1771,8 +2043,9 @@ class OrreryScene {
             tr.marker.area.visible = onScreen;
             tr.marker.moveTo(x, y);
             const featured = sameSubject(this._selected, {tr}) || sameSubject(this._hover, {tr});
-            // Telescopes crowd around L1 and L2, so they are named only on request.
-            tr.label.visible = onScreen && (showLabels && tr.mission.group !== 'observatory' || featured);
+            // Telescopes crowd around L1 and L2, so they are named only on request,
+            // and Moon missions crowd around Earth.
+            tr.label.visible = onScreen && (showLabels && !tr.mission.group || featured);
             if (tr.label.visible) {
                 // Far craft can project near the Sun when they climb out of
                 // the ecliptic toward or away from the camera; say how far.
@@ -1849,6 +2122,21 @@ class OrreryScene {
     }
 
     // Where an event's place is drawn on screen.
+    // Missions to the Moon: Earth's neighborhood drawn with the Moon on its
+    // ring, and the craft near the Moon around its dot.
+    _lunarSpot(tr) {
+        const earth = this._bodyById('earth');
+        const m = earth.moons.find(x => x.id === 'moon');
+        const k = (m?.r ?? earth.R * 2 + 6) / 384400;
+        const place = v => {
+            const d = this._proj.view(v);
+            return [earth.x + d[0] * k, earth.y - d[1] * k, d[2] * k];
+        };
+        const moon = m ? [m.x, m.y, 0] : place(Astro.moonPosition(this._jd));
+        const p = tr.screen(this._jd, {place, moon, R: Math.max(2, m?.R ?? 2), view: v => this._proj.view(v)});
+        return p ?? [earth.x, earth.y];
+    }
+
     _screenOf(ev) {
         const b = ev?.at && this._bodyById(ev.at);
         if (b)
@@ -1917,11 +2205,11 @@ class OrreryScene {
     // ---- Events and fact cards ----
 
     _fireEvents() {
-        if (!this._events || (this._live() && !this._browsing))
+        if (!this._events || (this._live() && !this._browsing && !this._tour))
             return;
         while (this._eventIndex < this._events.length && this._events[this._eventIndex].t <= this._jd) {
             const ev = this._events[this._eventIndex++];
-            if (!this._settings.get_boolean('show-missions') || !this._settings.get_boolean('show-facts') || this._isFar)
+            if (!this._settings.get_boolean('show-missions') || !this._settings.get_boolean('show-facts') || this._isFar && !this._tour)
                 continue;
             // Skip events left far behind (e.g. after the replay speed was
             // raised) and the ones swept past while dragging the timeline.
@@ -2119,7 +2407,7 @@ class OrreryScene {
     _residents(id) {
         const now = [], past = [];
         for (const tr of this._trajectories) {
-            const stays = tr.segments.filter(sg => sg.kind === 'stay' && sg.body === id);
+            const stays = tr.segments.filter(sg => (sg.kind === 'stay' || sg.phase === 'orbit' || sg.phase === 'surface') && sg.body === id);
             if (stays.some(sg => this._jd >= sg.t0 && this._jd < Math.min(sg.t1, tr.end)))
                 now.push(tr.mission.id);
             else if (stays.some(sg => sg.t0 <= this._jd))
@@ -2160,9 +2448,16 @@ class OrreryScene {
         this._pin = new Card(this._hud, this._details(subject), this._subjectColor(subject), this._cardWidth, {
             expanded: expand || wasExpanded,
             onClose: () => this._deselect(),
-            onEvent: ev => this._seek(ev.t, true, ev),
+            onEvent: ev => {
+                this._tourYield();
+                this._seek(ev.t, true, ev);
+            },
             onLink: link => this._follow(link),
-            onZoom: () => this._focusOn(subject.id),
+            onZoom: () => {
+                this._tourYield();
+                this._focusOn(subject.id);
+            },
+            onStory: subject.tr && subject.tr.mission.group !== 'observatory' ? () => this.startTour('story', subject.tr.mission.id) : null,
         });
         this._pin.place(this._area.right - this._margin - this._cardWidth, this._slots.cardTop);
         this._pin.setMaxHeight(this._slots.cardBottom - this._slots.cardTop);
@@ -2344,6 +2639,8 @@ class OrreryScene {
 
     _activity() {
         this._lastActivity = this._realTime;
+        if (this._tour?.auto)
+            this._endTour();
         this._browseClock = 0;
         if (this._timelineMode === 'auto' && !this._timeline.shown) {
             this._timeline.show();
@@ -2555,6 +2852,11 @@ class OrreryScene {
             this._layoutSunlight();
             this._syncTimelineState();
             this._updateAll(0);
+        } else if (TOUR_KEYS.includes(key)) {
+            // A new choice of automatic tour starts afresh.
+            if (this._tour?.auto)
+                this._endTour();
+            this._tourRest = this._realTime;
         } else if (key === 'days-per-second' || key === 'spin-planets') {
             this._syncTimelineState();
             this._updateHud();
