@@ -1,6 +1,7 @@
 #!/bin/bash
 # Inside the container (see run.sh): boot GNOME Shell headless with Orrery
-# and the tester extension, which drives it and logs what happens.
+# and the tester extension, which drives it and logs what happens. Two
+# monitors of different shapes, so the second one gets a scene too.
 set -u
 if [ -n "${INSTALL:-}" ]; then
     if command -v dnf >/dev/null; then dnf -y -q install /dist/*.noarch.rpm >/dev/null 2>&1
@@ -29,7 +30,7 @@ dbus-run-session -- bash -c '
 gsettings set org.gnome.shell disable-user-extensions false
 gsettings set org.gnome.shell disable-extension-version-validation true
 gsettings set org.gnome.shell enabled-extensions "[\"orrery@fqazzazee.github.io\", \"orrery-tester@local\"]"
-gnome-shell --headless --wayland --no-x11 --virtual-monitor 1920x1080 > /out/log.txt 2>&1 &
+gnome-shell --headless --wayland --no-x11 --virtual-monitor 1920x1080 --virtual-monitor 1280x1024 > /out/log.txt 2>&1 &
 PID=$!
 for i in $(seq 1 150); do [ -f /out/done ] && break; sleep 1; done
 kill $PID; wait $PID 2>/dev/null' >/dev/null 2>&1

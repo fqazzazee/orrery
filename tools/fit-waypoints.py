@@ -14,7 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'lib' / 'waypoints.js'
 HORIZONS = {
-    'mariner10': None, 'galileo': '-77', 'ulysses': '-55', 'cassini': '-82', 'rosetta': '-226',
+    'mariner10': None, 'pioneer10': '-23', 'pioneer11': '-24', 'voyager1': '-31', 'voyager2': '-32',
+    'galileo': '-77', 'ulysses': '-55', 'cassini': '-82', 'rosetta': '-226',
     'messenger': '-236', 'newhorizons': '-98', 'dawn': '-203', 'juno': '-61', 'hayabusa2': '-37',
     'osirisrex': '-64', 'parker': None, 'bepicolombo': '-121', 'solarorbiter': '-144', 'lucy': '-49',
     'psyche': '-255', 'juice': '-28', 'europaclipper': '-159', 'hera': '-91',

@@ -2,6 +2,7 @@ import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
@@ -19,14 +20,16 @@ import {MISSIONS, buildTrajectories} from './lib/missions.js';
 import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
 import * as Render from './lib/render.js';
+import {MUSIC_MODES, migrateSettings, nextMode} from './lib/settings.js';
 import {Card, LayersPanel, Timeline, label} from './lib/ui.js';
 
-const RELAYOUT_KEYS = ['distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
+const RELAYOUT_KEYS = ['other-monitors', 'distance-scale', 'tilt', 'azimuth', 'zoom', 'planet-scale', 'show-orbits',
     'show-stars', 'show-belts', 'show-pluto', 'show-labels', 'show-hud', 'show-missions', 'show-facts',
     'interactive', 'timeline', 'timeline-position', 'show-moons', 'show-small-bodies', 'show-lagrange'];
-const SCHEDULE_KEYS = ['fps', 'pause-when-covered', 'pause-coverage', 'battery-saver', 'battery-fps',
-    'idle-dim-minutes', 'adaptive-fps'];
-const MUSIC_KEYS = ['music-muted', 'music-button', 'music-source', 'music-folder', 'music-volume', 'music-when-hidden'];
+const SCHEDULE_KEYS = ['fps', 'battery-saver', 'battery-fps', 'idle-dim-minutes', 'adaptive-fps'];
+// What decides whether the desktop counts as hidden, and what then stops.
+const HIDDEN_KEYS = ['animation', 'pause-coverage', 'see-through-apps'];
+const MUSIC_KEYS = ['music-mode', 'music-button', 'music-source', 'music-folder', 'music-volume'];
 const HOLD_SECONDS = 20;          // pause on "today" before the replay starts over
 const EVENT_CARD_SECONDS = 8;
 const TRAIL_HZ = 4;
@@ -40,9 +43,13 @@ const SPEEDS = [0.5, 1, 2, 4, 8, 12, 20, 30, 60, 120, 240, 400];
 // nearest stars), and how far a wheel notch goes.
 const ZOOM_STOPS = [0, 0.22, 0.6, 1];
 const WHEEL_STEP = 0.06;
-const FAR_FROM = 0.3;                   // past this, time runs in years
+const FAR_FROM = 0.3;                   // past this, time quickens with the view
 const FAR_END = Astro.jd('2500-01-01');     // how far the timeline reaches then
-const FAR_SPEEDS = [36.525, 182.625, 365.25, 1826.25, 3652.5, 18262.5, 36525];   // days per second
+// Zoomed out, time runs this power of how much wider the view is than where
+// the far view starts: from the planets' own pace there to some 30 times
+// that at the nearest stars.
+const FAR_QUICKEN = 0.5;
+const FAR_RATES = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];   // times the far view's own pace
 const FOCUS_RATES = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16];   // times the close-up's own pace
 const FOCUS_MS = 750;
 const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
@@ -190,7 +197,7 @@ class OrreryScene {
         this._moonClock = 0;          // advances while the planets spin
         this._zoomOut = 0;            // 0 the planets ... 1 the nearest stars
         this._zoomTarget = 0;
-        this._farDps = 3652.5;        // ten years a second when zoomed out
+        this._farMul = 1;             // the far view's speed, times its own pace
         this._focus = null;           // PlanetView of a planet up close
         this._focusMul = 1;
         // Days the moons (and satellites, up close) have run on while the
@@ -198,7 +205,7 @@ class OrreryScene {
         this._drift = 0;
         this.powerSaving = false;
         this.onActivity = null;
-        this.musicState = 'hidden';   // for the timeline's music button
+        this.musicState = 'hidden';   // for the timeline's music button: a music-mode, or hidden
         this.onMusicToggle = null;
         this.onOpenPrefs = null;
 
@@ -501,7 +508,7 @@ class OrreryScene {
             return;
         }
         if (this._isFar) {
-            this._farDps = step(FAR_SPEEDS, this._farDps);
+            this._farMul = step(FAR_RATES, this._farMul);
             this._syncTimelineState();
             this._updateHud();
             return;
@@ -571,6 +578,7 @@ class OrreryScene {
     relayout(monitor, workArea) {
         const s = this._settings;
         const W = monitor.width, H = monitor.height;
+        this._monitorIndex = monitor.index;
         this._W = W;
         this._H = H;
         this.actor.set_position(monitor.x, monitor.y);
@@ -593,6 +601,7 @@ class OrreryScene {
             mode: s.get_string('distance-scale'), tilt, azimuth: s.get_double('azimuth'),
         };
         this._proj = new Astro.Projection({...this._projParams, zoomOut: this._zoomOut});
+        this._farReach = new Astro.Projection({...this._projParams, zoomOut: FAR_FROM}).reach;
         this._unit = W / 220 * s.get_double('planet-scale') / 100;
         this._orbitCache = new Map();
         this._trojansDrawn = null;
@@ -1002,18 +1011,18 @@ class OrreryScene {
     _dps() {
         if (this._focus)
             return this._focus.rate * this._focusMul / Astro.DAY_S;
+        const dps = this._settings.get_double('days-per-second');
         if (this._isFar)
-            return this._farDps;
-        return this._settings.get_double('days-per-second');
+            return dps * this._farMul * (this._proj.reach / this._farReach) ** FAR_QUICKEN;
+        return dps;
     }
 
     _speedText() {
         if (this._focus)
             return `×${Astro.formatCount(Math.round(this._focus.rate * this._focusMul))}`;
-        const dps = this._dps();
-        if (dps >= 36.5)
-            return `${+(dps / 365.25).toFixed(dps < 365.25 ? 1 : 0)} y/s`;
-        return dps >= 1 ? `${+dps.toFixed(1)} d/s` : `${dps} d/s`;
+        // Two figures at most, so it holds still while the view zooms.
+        const dps = this._dps(), round = v => v < 10 ? +v.toFixed(1) : Math.round(v);
+        return dps >= 36.5 ? `${round(dps / 365.25)} y/s` : `${round(dps)} d/s`;
     }
 
     // ---- HUD ----
@@ -1059,11 +1068,8 @@ class OrreryScene {
             },
             speed: dir => this._changeSpeed(dir),
             now: () => this._goNow(),
-            sunlight: () => this._settings.set_boolean('sunlight-view', !this._settings.get_boolean('sunlight-view')),
-            spin: () => this._toggleSpin(),
             zoom: dir => this._zoom(dir),
             layers: () => this._togglePanel(),
-            prefs: () => this.onOpenPrefs?.(),
             music: () => this.onMusicToggle?.(),
             hover: h => this._timelineHover(h),
             activity: () => this._activity(),
@@ -1077,6 +1083,7 @@ class OrreryScene {
         // Chips to show and hide things and missions, from the timeline.
         this._panel = new LayersPanel(this._hud, {
             settings: this._settings, missions: MISSIONS,
+            spin: {isOn: () => this._spinning(), toggle: () => this._toggleSpin()},
             onPrefs: () => {
                 this._togglePanel(false);
                 this.onOpenPrefs?.();
@@ -1205,13 +1212,13 @@ class OrreryScene {
             playing: this._live() && !this._browsing ? true : this._playing,
             speed: this._speedText(),
             zoom: this._focus ? 'planet' : this._zoomTarget >= 0.999 ? 'max' : this._zoomTarget > 0.01 ? 'far' : 'system',
-            sunlight: this._settings.get_boolean('sunlight-view'),
             live: this._live() && !this._browsing,
-            spinning: this._spinning(),
-            spinHeld: this._settings.get_boolean('spin-planets') && !this._spinning(),
             music: this.musicState,
             layers: this._panel?.isOpen,
         });
+        // The spin chip: battery saver can hold it off.
+        if (this._panel?.isOpen)
+            this._panel.sync();
     }
 
     _updateHud() {
@@ -2327,7 +2334,7 @@ class OrreryScene {
 
     // We cover the wallpaper, so pass right clicks on to its menu.
     _openBackgroundMenu(x, y) {
-        const bg = Main.layoutManager._bgManagers?.[Main.layoutManager.primaryIndex]?.backgroundActor;
+        const bg = Main.layoutManager._bgManagers?.[this._monitorIndex ?? Main.layoutManager.primaryIndex]?.backgroundActor;
         const menu = bg?._backgroundMenu;
         if (!menu)
             return;
@@ -2559,6 +2566,12 @@ class OrreryScene {
         this._syncTimelineState();
     }
 
+    // Jump to the same date as another monitor's scene.
+    setTime(jd) {
+        if (!this._live())
+            this._seek(jd);
+    }
+
     // In the overview the desktop (and the scene with it) is hidden while
     // clones of it are shown, and hidden actors are not laid out. Lay out
     // whatever changed by hand so the clones stay up to date.
@@ -2574,13 +2587,11 @@ class OrreryScene {
 export default class OrreryExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._scene = new OrreryScene(this._settings);
-        this._scene.onActivity = () => this._wake();
-
-        // Inside the background group: above the wallpaper, below every window.
-        const bgGroup = Main.layoutManager._backgroundGroup;
-        bgGroup.add_child(this._scene.actor);
-        bgGroup.set_child_above_sibling(this._scene.actor, null);
+        migrateSettings(this._settings);
+        // The scene on the main monitor; the others get scenes of their own
+        // or copies of it (see _syncMonitors).
+        this._others = [];
+        this._scene = this._makeScene();
 
         const relayout = () => this._relayout();
         Main.layoutManager.connectObject('monitors-changed', relayout, this);
@@ -2590,6 +2601,8 @@ export default class OrreryExtension extends Extension {
                 this._queueRelayout();
             else if (SCHEDULE_KEYS.includes(key))
                 this._schedule();
+            else if (HIDDEN_KEYS.includes(key))
+                this._syncAnimation();
             else if (MUSIC_KEYS.includes(key))
                 this._syncMusic();
             else if (key === 'show-in-overview')
@@ -2597,7 +2610,7 @@ export default class OrreryExtension extends Extension {
             else if (key === 'sunlight-auto')
                 this._syncSunlightAuto(true);
             else
-                this._scene.onSettingChanged(key);
+                this._scenes.forEach(scene => scene.onSettingChanged(key));
             if (key === 'spin-planets')
                 this._schedule();
         }, this);
@@ -2606,27 +2619,27 @@ export default class OrreryExtension extends Extension {
             this._syncSunlightAuto();
         });
 
-        // The overview and workspace switches show clones of the scene
+        // The overview and workspace switches show clones of the scenes
         // instead of the plain wallpaper.
-        this._mirror = new SceneMirror(this._scene.actor);
+        this._mirror = new SceneMirror(index => this._actorOn(index));
         this._syncMirror();
         Main.overview.connectObject('showing', () => this._recheck(), 'hidden', () => this._recheck(), this);
 
         this._music = new Music({
             onError: message => {
-                this._settings.set_boolean('music-muted', true);
+                this._settings.set_string('music-mode', 'muted');
                 Main.notify('Orrery', `No music: ${message}`);
             },
         });
-        this._scene.onMusicToggle = () => this._settings.set_boolean('music-muted', !this._settings.get_boolean('music-muted'));
-        this._scene.onOpenPrefs = () => this.openPreferences();
         this._syncMusic();
 
         this._relayout();
         this._lastTick = GLib.get_monotonic_time();
         this._coveredClock = 0;
         this._paused = false;
+        this._musicHidden = false;
         this._idle = false;
+        this._syncAnimation();
         this._schedule();
     }
 
@@ -2653,19 +2666,96 @@ export default class OrreryExtension extends Extension {
         this._music = null;
         this._power?.destroy();
         this._power = null;
+        this._clearOthers();
         this._scene?.destroy();
         this._scene = null;
         this._settings = null;
         clearCache();
     }
 
+    // Every scene running, the main one first.
+    get _scenes() {
+        return this._scene ? [this._scene, ...this._others.filter(o => o.scene).map(o => o.scene)] : [];
+    }
+
+    // A scene in the background group: above the wallpaper, below every
+    // window.
+    _makeScene() {
+        const scene = new OrreryScene(this._settings);
+        scene.onActivity = () => this._wake();
+        scene.onMusicToggle = () => this._settings.set_string('music-mode', nextMode(MUSIC_MODES, this._settings.get_string('music-mode')));
+        scene.onOpenPrefs = () => this.openPreferences();
+        scene.powerSaving = this._saving;
+        scene.setMusicState(this._musicState ?? 'hidden');
+        Main.layoutManager._backgroundGroup.add_child(scene.actor);
+        return scene;
+    }
+
+    // What the desktop of a monitor shows: a scene, a copy, or nothing.
+    _actorOn(index) {
+        if (index === Main.layoutManager.primaryIndex)
+            return this._scene?.actor ?? null;
+        const other = this._others.find(o => o.index === index);
+        return other?.scene?.actor ?? other?.copy ?? null;
+    }
+
+    _clearOthers() {
+        for (const o of this._others) {
+            o.scene?.destroy();
+            o.copy?.destroy();
+        }
+        this._others = [];
+    }
+
     _relayout() {
-        const monitor = Main.layoutManager.primaryMonitor;
+        const lm = Main.layoutManager;
+        const monitor = lm.primaryMonitor;
         if (!monitor || !this._scene)
             return;
+        this._scene.relayout(monitor, lm.getWorkAreaForMonitor(lm.primaryIndex));
+        this._syncMonitors();
         this._raise();
-        const workArea = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
-        this._scene.relayout(monitor, workArea);
+    }
+
+    // The other monitors: a solar system of their own (at the same date as
+    // the main one), a copy of the main one fitted to the screen, or the
+    // plain wallpaper. Rebuilt when the monitors or the choice change.
+    _syncMonitors() {
+        const lm = Main.layoutManager;
+        const mode = this._settings.get_string('other-monitors');
+        const monitors = mode === 'none' ? [] : lm.monitors.filter(m => m.index !== lm.primaryIndex);
+        const key = `${mode}:${monitors.map(m => m.index).join()}`;
+        const fresh = key !== this._othersKey;
+        if (fresh) {
+            this._othersKey = key;
+            this._clearOthers();
+            this._others = monitors.map(m => ({index: m.index}));
+        }
+        const main = this._scene.actor;
+        for (const o of this._others) {
+            const m = lm.monitors[o.index];
+            if (mode === 'own') {
+                o.scene ??= this._makeScene();
+                o.scene.relayout(m, lm.getWorkAreaForMonitor(o.index));
+                if (fresh)
+                    o.scene.setTime(this._scene.jd);
+            } else {
+                if (!o.copy) {
+                    o.copy = new St.Widget({style: 'background-color: black;', clip_to_allocation: true});
+                    o.copy.add_child(new Clutter.Clone({source: main}));
+                    lm._backgroundGroup.add_child(o.copy);
+                }
+                // Fitted whole and centered; the rest stays black.
+                const k = Math.min(m.width / main.width, m.height / main.height);
+                o.copy.set({x: m.x, y: m.y, width: m.width, height: m.height});
+                o.copy.get_first_child().set({width: main.width, height: main.height, scale_x: k, scale_y: k,
+                    x: Math.round((m.width - main.width * k) / 2), y: Math.round((m.height - main.height * k) / 2)});
+            }
+        }
+        if (fresh) {
+            this._mirror?.refresh();
+            this._syncMusic();
+        }
     }
 
     // Other desktop extensions (e.g. Depth Clock) also raise themselves in the
@@ -2676,8 +2766,11 @@ export default class OrreryExtension extends Extension {
             return;
         this._raiseId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
             this._raiseId = 0;
-            if (this._scene)
-                Main.layoutManager._backgroundGroup.set_child_above_sibling(this._scene.actor, null);
+            const group = Main.layoutManager._backgroundGroup;
+            for (const actor of [this._scene?.actor, ...this._others.map(o => o.scene?.actor ?? o.copy)]) {
+                if (actor)
+                    group.set_child_above_sibling(actor, null);
+            }
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -2718,20 +2811,34 @@ export default class OrreryExtension extends Extension {
     }
 
     // Play when not muted, and (unless it should carry on regardless) while
-    // the desktop can be seen.
+    // a desktop can be seen.
     _syncMusic() {
         if (!this._music)
             return;
         const s = this._settings;
         this._music.setSource(s.get_string('music-source'), s.get_string('music-folder'));
         this._music.setVolume(s.get_double('music-volume') / 100);
-        const locked = Main.sessionMode.isLocked || Main.screenShield?.locked;
-        const want = !s.get_boolean('music-muted') && !locked && (s.get_boolean('music-when-hidden') || !this._paused);
+        const mode = s.get_string('music-mode');
+        const want = mode !== 'muted' && !this._locked && (mode === 'continuous' || !this._musicHidden);
         if (want)
             this._music.play();
         else
-            this._music.pause({release: s.get_boolean('music-muted')});
-        this._scene?.setMusicState(!s.get_boolean('music-button') ? 'hidden' : s.get_boolean('music-muted') ? 'muted' : 'playing');
+            this._music.pause({release: mode === 'muted'});
+        this._musicState = s.get_boolean('music-button') ? mode : 'hidden';
+        this._scenes.forEach(scene => scene.setMusicState(this._musicState));
+    }
+
+    // What hides the desktop changed: look again now. Each see-through app
+    // lets the animation, the music or both carry on behind it.
+    _syncAnimation() {
+        this._seeThrough = new Map();
+        for (const [id, what] of Object.entries(this._settings.get_value('see-through-apps').deepUnpack()))
+            this._seeThrough.set(id.toLowerCase().replace(/\.desktop$/, ''), what);
+        this._recheck();
+    }
+
+    get _locked() {
+        return Main.sessionMode.isLocked || Main.screenShield?.locked;
     }
 
     // Look again at once (the overview opened or closed) rather than at the
@@ -2760,7 +2867,7 @@ export default class OrreryExtension extends Extension {
             fps = Math.min(fps, s.get_int('battery-fps'));
         if (this._idle)
             fps = Math.min(fps, IDLE_FPS);
-        if (s.get_boolean('adaptive-fps') && this._scene?.still)
+        if (s.get_boolean('adaptive-fps') && this._scenes.every(scene => scene.still))
             fps = Math.min(fps, STILL_FPS);
         return fps;
     }
@@ -2772,8 +2879,8 @@ export default class OrreryExtension extends Extension {
     _schedule() {
         if (!this._settings)
             return;
-        if (this._scene)
-            this._scene.powerSaving = this._saving;
+        for (const scene of this._scenes)
+            scene.powerSaving = this._saving;
         if (this._timer)
             GLib.source_remove(this._timer);
         this._intervalMs = this._interval();
@@ -2785,9 +2892,12 @@ export default class OrreryExtension extends Extension {
     _wake() {
         if (this._idle) {
             this._idle = false;
-            this._scene.setDim(1);
+            this._scenes.forEach(scene => scene.setDim(1));
         }
-        if (this._interval() !== this._intervalMs)
+        // Paused, it comes to life while the pointer is on it.
+        if (this._paused)
+            this._recheck();
+        else if (this._interval() !== this._intervalMs)
             this._schedule();
     }
 
@@ -2808,11 +2918,14 @@ export default class OrreryExtension extends Extension {
                 again = GLib.SOURCE_REMOVE;
             }
         }
-        if (!this._paused)
-            this._safely(() => {
-                this._scene.tick(dt);
-                this._scene.syncHidden();
-            });
+        if (!this._paused) {
+            for (const scene of this._scenes) {
+                this._safely(() => {
+                    scene.tick(dt);
+                    scene.syncHidden();
+                });
+            }
+        }
         return again;
     }
 
@@ -2833,30 +2946,40 @@ export default class OrreryExtension extends Extension {
     // Update pause and dim states; true if the frame rate should change.
     _check() {
         const s = this._settings;
-        const paused = s.get_boolean('pause-when-covered') && this._coverage() * 100 >= s.get_int('pause-coverage');
+        // Hidden once every desktop showing the solar system is hidden.
+        const shown = [Main.layoutManager.primaryIndex, ...this._others.map(o => o.index)];
+        const hiddenFor = what => shown.every(index => this._coverage(index, what) * 100 >= s.get_int('pause-coverage'));
+        const hidden = hiddenFor('animation'), musicHidden = hiddenFor('music');
+        // Paused, it still moves while someone uses it; nobody sees it
+        // behind the lock screen whatever the mode.
+        const mode = s.get_string('animation');
+        const paused = this._locked || (mode !== 'continuous' && hidden) ||
+            (mode === 'paused' && !this._scenes.some(scene => scene.interacting));
         const minutes = s.get_int('idle-dim-minutes');
         const idle = minutes > 0 && global.backend.get_core_idle_monitor().get_idletime() > minutes * 60000;
         if (idle !== this._idle) {
             this._idle = idle;
-            this._scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1);
+            this._scenes.forEach(scene => scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1));
         }
-        if (paused !== this._paused) {
+        if (paused !== this._paused || musicHidden !== this._musicHidden) {
             this._paused = paused;
+            this._musicHidden = musicHidden;
             this._syncMusic();
         }
         return this._interval() !== this._intervalMs;
     }
 
-    // How much of the desktop windows hide, 0 to 1. Maximized and fullscreen
-    // windows count as all of it; otherwise sample a grid over the monitor.
-    _coverage() {
-        if (Main.sessionMode.isLocked || Main.screenShield?.locked)
+    // How much of a monitor's desktop windows hide, 0 to 1, for the animation
+    // or the music. Maximized and fullscreen windows count as all of it;
+    // otherwise sample a grid over the monitor. The windows of see-through
+    // apps that let that carry on do not count.
+    _coverage(index, what) {
+        if (this._locked)
             return 1;
         // The overview shows the scene in its workspace cards and behind
         // them, unless that is turned off.
         if (Main.overview.visible)
             return this._mirror?.enabled ? 0 : 1;
-        const index = Main.layoutManager.primaryIndex;
         const area = Main.layoutManager.getWorkAreaForMonitor(index);
         const workspace = global.workspace_manager.get_active_workspace();
         const rects = [];
@@ -2864,7 +2987,7 @@ export default class OrreryExtension extends Extension {
             if (w.minimized || w.get_monitor() !== index || !w.showing_on_its_workspace())
                 continue;
             const type = w.get_window_type();
-            if (type === Meta.WindowType.DESKTOP || type === Meta.WindowType.DOCK)
+            if (type === Meta.WindowType.DESKTOP || type === Meta.WindowType.DOCK || this._seesThrough(w, what))
                 continue;
             if (w.is_fullscreen())
                 return 1;
@@ -2887,5 +3010,18 @@ export default class OrreryExtension extends Extension {
             }
         }
         return hidden / (nx * ny);
+    }
+
+    // Whether the animation or the music carries on behind this window: it
+    // belongs to a see-through app, found by its app or, for windows the
+    // shell cannot match to one, by its class.
+    _seesThrough(w, what) {
+        if (!this._seeThrough?.size)
+            return false;
+        const app = Shell.WindowTracker.get_default().get_window_app(w);
+        const ids = [app?.get_id(), w.get_sandboxed_app_id(), w.get_wm_class(), w.get_wm_class_instance()]
+            .filter(Boolean).map(id => id.toLowerCase().replace(/\.desktop$/, ''));
+        const lets = this._seeThrough.get(ids.find(id => this._seeThrough.has(id)));
+        return lets === 'both' || lets === what;
     }
 }

@@ -1,5 +1,7 @@
 // Unit tests for the pure modules. Run with `make test` (needs gjs only,
 // no running GNOME Shell).
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import System from 'system';
 
 import * as Astro from '../lib/astro.js';
@@ -7,6 +9,7 @@ import {BODIES, LAGRANGE, MOONS, SMALL_BODIES} from '../lib/bodies.js';
 import {bodyDetails, details, missionDetails, missionStatus} from '../lib/facts.js';
 import {buildTrajectories} from '../lib/missions.js';
 import {sunlightColor} from '../lib/render.js';
+import {migrateSettings} from '../lib/settings.js';
 import {GM} from '../lib/bodies.js';
 import {SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
 
@@ -208,6 +211,48 @@ check(near(Astro.inclinationDeg(Astro.planetOrbit('mercury', Astro.J2000)), 7.0,
     check(near(p0.radiusPx(30.1), 500, 1e-9), 'not zoomed out, Neptune still fits the screen');
     const p1 = new Astro.Projection({cx: 0, cy: 0, fitPx: 500, zoomOut: 1});
     check(near(p1.radiusPx(Astro.FAR_AU), 500, 1e-6) && p1.radiusPx(30) > 100, 'all the way out, the nearest stars fit and the planets still show');
+}
+
+// The craft leaving the solar system stay on JPL Horizons' paths, past
+// their last encounter and out along their real direction of travel.
+{
+    const real = {
+        voyager1: [['1989-09-13', [-15.5308, -28.7763, 20.9315]], ['2016-09-06', [-27.7783, -107.8734, 78.0717]],
+            ['2025-09-04', [-31.6939, -133.7430, 96.7688]]],
+        voyager2: [['2016-09-26', [30.9535, -85.6707, -65.7326]], ['2025-09-09', [38.9508, -103.3765, -87.1732]]],
+    };
+    const trs = buildTrajectories();
+    for (const [id, points] of Object.entries(real)) {
+        const tr = trs.find(t => t.mission.id === id);
+        const worst = Math.max(...points.map(([d, p]) => Astro.norm(Astro.sub(tr.position(Astro.jd(d)), p)) / Astro.norm(p)));
+        check(worst < 0.01, `${id} within 1% of JPL Horizons (worst ${(100 * worst).toFixed(2)}%)`);
+    }
+}
+
+// The old on/off switches carry over to the modes, once.
+{
+    const dir = GLib.build_filenamev([GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]), '..', 'schemas']);
+    const source = Gio.SettingsSchemaSource.new_from_directory(dir, null, false);
+    const schema = source.lookup('org.gnome.shell.extensions.orrery', false);
+    const settings = () => new Gio.Settings({settings_schema: schema, backend: Gio.memory_settings_backend_new()});
+    const cases = [
+        [{}, 'muted', 'background'],
+        [{'music-muted': false}, 'background', 'background'],
+        [{'music-muted': false, 'music-when-hidden': true, 'pause-when-covered': false}, 'continuous', 'continuous'],
+        [{'music-muted': true, 'pause-when-covered': true}, 'muted', 'background'],
+    ];
+    for (const [old, music, animation] of cases) {
+        const s = settings();
+        for (const [k, v] of Object.entries(old))
+            s.set_boolean(k, v);
+        migrateSettings(s);
+        check(s.get_string('music-mode') === music && s.get_string('animation') === animation &&
+            ['music-muted', 'music-when-hidden', 'pause-when-covered'].every(k => s.get_user_value(k) === null),
+        `old settings ${JSON.stringify(old)} carry over`);
+        s.set_string('music-mode', 'muted');
+        migrateSettings(s);
+        check(s.get_string('music-mode') === 'muted', 'and only once');
+    }
 }
 
 print(failed ? `\n${failed} failed` : '\nall passed');

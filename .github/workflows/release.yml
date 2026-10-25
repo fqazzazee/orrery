@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v1.3.2 to build every package and publish a release with
+# Push a tag like v1.3.3 to build every package and publish a release with
 # them. Run by hand to just build the packages.
 on:
   push:

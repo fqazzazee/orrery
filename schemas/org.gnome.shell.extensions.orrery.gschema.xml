@@ -101,6 +101,11 @@
       <default>'bottom'</default>
       <summary>Where the timeline sits on the screen</summary>
     </key>
+    <key name="other-monitors" type="s">
+      <choices><choice value="own"/><choice value="copy"/><choice value="none"/></choices>
+      <default>'own'</default>
+      <summary>On monitors other than the main one: a solar system of their own, a copy of the main one, or the plain wallpaper</summary>
+    </key>
     <key name="show-in-overview" type="b">
       <default>true</default>
       <summary>Show the solar system in the overview and while switching workspaces, instead of the plain wallpaper</summary>
@@ -120,9 +125,14 @@
     </key>
 
     <!-- Music -->
+    <key name="music-mode" type="s">
+      <choices><choice value="muted"/><choice value="background"/><choice value="continuous"/></choices>
+      <default>'muted'</default>
+      <summary>Music off, playing only while the desktop can be seen, or playing all the time; the speaker button on the timeline steps through them</summary>
+    </key>
     <key name="music-muted" type="b">
       <default>true</default>
-      <summary>Music is off; the speaker button on the timeline turns it on</summary>
+      <summary>Replaced by music-mode; read once to carry the old setting over</summary>
     </key>
     <key name="music-button" type="b">
       <default>true</default>
@@ -142,16 +152,25 @@
     </key>
     <key name="music-when-hidden" type="b">
       <default>false</default>
-      <summary>Keep playing while windows hide the desktop</summary>
+      <summary>Replaced by music-mode; read once to carry the old setting over</summary>
     </key>
 
     <!-- Power and OLED care -->
     <key name="fps" type="i">
       <range min="10" max="60"/><default>30</default>
     </key>
+    <key name="animation" type="s">
+      <choices><choice value="paused"/><choice value="background"/><choice value="continuous"/></choices>
+      <default>'background'</default>
+      <summary>Animate only while the pointer is on the desktop (a still picture otherwise), only while windows leave the desktop in view, or all the time; also in the timeline's panel</summary>
+    </key>
+    <key name="see-through-apps" type="a{ss}">
+      <default>{}</default>
+      <summary>Apps whose windows do not count as hiding the desktop, such as a transparent terminal: desktop file ID to what carries on behind them (both, animation or music)</summary>
+    </key>
     <key name="pause-when-covered" type="b">
       <default>true</default>
-      <summary>Stop animating while a maximized or fullscreen window, the overview or the lock screen hides the desktop</summary>
+      <summary>Replaced by animation; read once to carry the old setting over</summary>
     </key>
     <key name="pause-coverage" type="i">
       <range min="30" max="100"/><default>90</default>

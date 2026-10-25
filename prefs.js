@@ -1,15 +1,25 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {MISSIONS} from './lib/missions.js';
 import {placeName} from './lib/bodies.js';
+import {migrateSettings} from './lib/settings.js';
+
+function appIcon(app) {
+    const icon = app?.get_icon();
+    const image = icon ? Gtk.Image.new_from_gicon(icon) : Gtk.Image.new_from_icon_name('application-x-executable-symbolic');
+    image.pixel_size = 32;
+    return image;
+}
 
 export default class OrreryPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._settings = this.getSettings();
+        migrateSettings(this._settings);
         this._settingsIds = [];
         window.connect('close-request', () => {
             for (const id of this._settingsIds)
@@ -165,6 +175,11 @@ export default class OrreryPreferences extends ExtensionPreferences {
                 ['top-left', 'Top left'],
                 ['top-right', 'Top right'],
             ], 'Anything in the same corner moves out of its way'), 'interactive'),
+            this._combo('Other monitors', 'other-monitors', [
+                ['own', 'Their own'],
+                ['copy', 'A copy'],
+                ['none', 'Plain wallpaper'],
+            ], 'Their own takes more power than a copy'),
             this._switch('Show in the overview', 'show-in-overview',
                 'The solar system in the Activities overview, behind the app grid and while switching workspaces, instead of the plain wallpaper'),
             this._switch('Sunlight view', 'sunlight-view',
@@ -190,12 +205,16 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._switch('Slow down when still', 'adaptive-fps',
                 'Drop to 5 frames per second while time is paused, the planets are not spinning and the pointer is away'),
         ]));
-        page.add(this._group('Hidden desktop', [
-            this._switch('Pause when hidden', 'pause-when-covered',
-                'Stop animating behind windows, the overview and the lock screen'),
-            this._dependsOn(this._spin('Pause once windows cover', 'pause-coverage', 30, 100, 5,
-                'Percent of the desktop. Maximized and fullscreen windows always count as all of it'), 'pause-when-covered'),
-        ]));
+        page.add(this._group('Animation', [
+            this._combo('Animate', 'animation', [
+                ['paused', 'Paused'],
+                ['background', 'Background only'],
+                ['continuous', 'Continuous'],
+            ], 'Paused moves only while you use it'),
+            this._spin('The desktop counts as hidden once windows cover', 'pause-coverage', 30, 100, 5,
+                'Percent of it. Maximized and fullscreen windows always count as all of it. Music set to Background only stops then too'),
+        ], 'Background only stops the solar system while windows hide the desktop, Continuous keeps it going, and Paused keeps a still picture that comes to life while the pointer is on the desktop. Nothing animates behind the lock screen. With more than one monitor, the desktop counts as hidden once every monitor showing the solar system is. The panel on the timeline switches these too.'));
+        page.add(this._seeThroughGroup());
         page.add(this._group('Battery', [
             this._switch('Battery saver', 'battery-saver',
                 'On battery or in Power Saver mode, lower the frame rate and stop the planets spinning'),
@@ -215,6 +234,110 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
         ]));
         return page;
+    }
+
+    // The see-through apps: desktop file ID -> what carries on behind them.
+    get _seeThrough() {
+        return this._settings.get_value('see-through-apps').deepUnpack();
+    }
+
+    set _seeThrough(apps) {
+        this._settings.set_value('see-through-apps', new GLib.Variant('a{ss}', apps));
+    }
+
+    // Apps whose windows do not count as hiding the desktop, each for the
+    // animation, the music or both.
+    _seeThroughGroup() {
+        const group = new Adw.PreferencesGroup({
+            title: 'See-through apps',
+            description: 'Behind windows of these apps the solar system, its music or both carry on as if the desktop were in view. For a transparent terminal, say.',
+        });
+        const add = new Gtk.Button({icon_name: 'list-add-symbolic', valign: Gtk.Align.CENTER, tooltip_text: 'Add an app'});
+        add.add_css_class('flat');
+        add.connect('clicked', () => this._chooseApp(add));
+        group.set_header_suffix(add);
+
+        const choices = [['both', 'Animation and music'], ['music', 'Music only'], ['animation', 'Animation only']];
+        const empty = new Adw.ActionRow({title: 'None yet', subtitle: 'Press + to pick an app'});
+        let rows = [], shown = null;
+        const rowFor = new Map();
+        const sync = () => {
+            const apps = this._seeThrough;
+            // Same apps: only a choice changed.
+            if (Object.keys(apps).join() === shown) {
+                for (const [id, row] of rowFor)
+                    row.selected = Math.max(0, choices.findIndex(([value]) => value === apps[id]));
+                return;
+            }
+            shown = Object.keys(apps).join();
+            for (const row of rows)
+                group.remove(row);
+            rowFor.clear();
+            const installed = new Map(Gio.AppInfo.get_all().map(a => [a.get_id(), a]));
+            rows = Object.entries(apps).map(([id, what]) => {
+                const app = installed.get(id);
+                const row = new Adw.ComboRow({
+                    title: app?.get_display_name() ?? id, subtitle: app ? 'Keeps going behind it' : 'Not installed',
+                    model: Gtk.StringList.new(choices.map(([, text]) => text)),
+                    selected: Math.max(0, choices.findIndex(([value]) => value === what)),
+                });
+                rowFor.set(id, row);
+                row.add_prefix(appIcon(app));
+                row.connect('notify::selected', () => {
+                    const value = choices[row.selected]?.[0];
+                    if (value && this._seeThrough[id] !== value)
+                        this._seeThrough = {...this._seeThrough, [id]: value};
+                });
+                const remove = new Gtk.Button({icon_name: 'user-trash-symbolic', valign: Gtk.Align.CENTER, tooltip_text: 'Remove'});
+                remove.add_css_class('flat');
+                remove.connect('clicked', () => {
+                    const rest = this._seeThrough;
+                    delete rest[id];
+                    this._seeThrough = rest;
+                });
+                row.add_suffix(remove);
+                return row;
+            });
+            if (!rows.length)
+                rows = [empty];
+            for (const row of rows)
+                group.add(row);
+        };
+        sync();
+        this._watch('changed::see-through-apps', sync);
+        return group;
+    }
+
+    // A searchable list of the installed apps; picking one adds it.
+    _chooseApp(parent) {
+        const taken = this._seeThrough;
+        const apps = Gio.AppInfo.get_all()
+            .filter(a => a.should_show() && a.get_id() && !(a.get_id() in taken))
+            .sort((a, b) => a.get_display_name().localeCompare(b.get_display_name()));
+        const dialog = new Adw.Dialog({title: 'Add a see-through app', content_width: 420, content_height: 560});
+        const search = new Gtk.SearchEntry({placeholder_text: 'Search apps', margin_start: 12, margin_end: 12, margin_bottom: 6});
+        const list = new Gtk.ListBox({selection_mode: Gtk.SelectionMode.NONE, margin_start: 12, margin_end: 12, margin_bottom: 12, valign: Gtk.Align.START});
+        list.add_css_class('boxed-list');
+        const names = new Map();
+        for (const app of apps) {
+            const row = new Adw.ActionRow({title: app.get_display_name(), activatable: true});
+            row.add_prefix(appIcon(app));
+            row.connect('activated', () => {
+                this._seeThrough = {...this._seeThrough, [app.get_id()]: 'both'};
+                dialog.close();
+            });
+            names.set(row, `${app.get_display_name()} ${app.get_id()}`.toLowerCase());
+            list.append(row);
+        }
+        list.set_filter_func(row => names.get(row).includes(search.text.toLowerCase()));
+        search.connect('search-changed', () => list.invalidate_filter());
+        const view = new Adw.ToolbarView();
+        view.add_top_bar(new Adw.HeaderBar());
+        view.add_top_bar(search);
+        view.content = new Gtk.ScrolledWindow({child: list, hscrollbar_policy: Gtk.PolicyType.NEVER, vexpand: true});
+        dialog.child = view;
+        dialog.present(parent);
+        search.grab_focus();
     }
 
     _missionsPage() {
@@ -304,20 +427,19 @@ export default class OrreryPreferences extends ExtensionPreferences {
         syncSource();
         this._watch('changed::music-source', syncSource);
 
-        const playing = new Adw.SwitchRow({title: 'Play music'});
-        this._settings.bind('music-muted', playing, 'active', Gio.SettingsBindFlags.INVERT_BOOLEAN);
-
         page.add(this._group('Background music', [
-            playing,
-            this._switch('Speaker button on the timeline', 'music-button', 'Turn the music on and off from the desktop'),
+            this._combo('Play', 'music-mode', [
+                ['muted', 'Muted'],
+                ['background', 'Background only'],
+                ['continuous', 'Continuous'],
+            ], 'Background only fades out behind windows'),
+            this._switch('Speaker button on the timeline', 'music-button', 'Step through these from the desktop'),
             this._combo('Music', 'music-source', [
                 ['ambient', 'Built-in ambient'],
                 ['folder', 'My own music'],
             ], 'The built-in music is made up as it plays: slow chords, a low drone and soft bells, never quite the same twice'),
             folderRow,
             this._spin('Volume', 'music-volume', 0, 100, 5, 'Percent'),
-            this._switch('Keep playing behind windows', 'music-when-hidden',
-                'Otherwise the music fades out while windows cover the desktop, and comes back with it'),
         ], 'Music stops while the screen is locked. To hear the Solar System Scope soundtrack, or anything else, put your copies of the tracks in a folder and choose it here: MP3, Ogg, Opus, FLAC, WAV and M4A all play.'));
         return page;
     }

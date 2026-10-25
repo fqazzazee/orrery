@@ -111,7 +111,7 @@ The Activities overview and workspace switches show the solar system, still movi
 - **From afar.**
   - Scroll the wheel down on the desktop, or use the zoom-out button, to pull back past the planets. You pass the termination shock and the heliopause, rings for one light-day, -week, -month and -year, the Kuiper belt, Sedna and Eris, the inner and outer Oort cloud, and the nearest stars.
   - The Voyagers, the Pioneers and New Horizons fly out along dashed paths marked with the years they get there, out to 40,000 AD.
-  - The scale eases to logarithmic as the camera pulls back and rises. The timeline reaches to 2500 and runs in years per second.
+  - The scale eases to logarithmic as the camera pulls back and rises. Time speeds up gently as you pull back, from the planets' own pace to about 30 times that at the nearest stars. The timeline reaches to 2500.
 - **Interactive.**
   - Point at anything to trace it; click to pin a card that follows it with live numbers. Expand the card for the full, scrolling sheet.
   - **A planet's sheet:** where it is in Earth's sky, its next opposition, its season and how long the trip takes. Then its orbit, gravity, air, magnetism, insides and moons, how it was found and named, who visited, and every bit of trivia.
@@ -121,14 +121,14 @@ The Activities overview and workspace switches show the solar system, still movi
   - Right-click still opens the usual desktop menu.
 - **Timeline.**
   - A scrubber with a tick for every launch, flyby and arrival, out to the planned ones in the 2030s. Drag or scroll it to move through time, and click a tick to jump to that event.
-  - **Controls:** play/pause, slower/faster and **Now**. Click the playhead (or middle-click anywhere on the bar) to pause or play. Buttons at the end turn the planets' spin, the music and the sunlight view on and off.
+  - **Controls:** play/pause, slower/faster and **Now**. Click the playhead (or middle-click anywhere on the bar) to pause or play. At the end, the speaker steps the music through its modes, and the list button opens the panel.
   - **Placement:** top or bottom, centered or in a corner; whatever shares its corner moves aside.
   - It appears when the pointer is on the desktop and fades away after a few seconds.
 - **Show and hide from the desktop.**
-  - The list button on the timeline opens a panel of chips. The first set covers orbits, names, stars, belts, moons, comets, Lagrange points, trails, fact cards and the sunlight view. Then come chips for every spacecraft and telescope.
+  - The list button on the timeline opens a panel. It starts with the modes: **Music** and **Animation** (each Muted or Paused, Background only, or Continuous), the planets' spin and the sunlight view. Then come chips for orbits, names, stars, belts, moons, comets, Lagrange points, trails and fact cards, and for every spacecraft and telescope.
   - Each group has **All** and **None**, and a switch hides or shows all missions at once.
-  - The gear button (or **Settings…** in the panel) opens the preferences.
-- **Music.** The speaker on the timeline plays a slow ambient piece made up as it plays (drifting chords, a low drone, soft bells in long echoes), or your own music from a folder, shuffled. It fades out while windows cover the desktop and stops when the screen locks.
+  - **Settings…** in the panel opens the preferences.
+- **Music.** A slow ambient piece made up as it plays (drifting chords, a low drone, soft bells in long echoes), or your own music from a folder, shuffled. The speaker on the timeline steps through **Muted**, **Background only** (it fades out while windows cover the desktop) and **Continuous**. It always stops when the screen locks.
 - **In the overview too.** The Activities overview shows the solar system in its workspace cards and, dimmed, behind the app grid; workspaces slide by with it when you switch.
 - **Sunlight view.**
   - The ☀ button colors the plane of the planets by how much sunlight falls there, from white-hot near the Sun through Earth's 1,361 W/m² to Neptune's 1.5. It adds labeled contours and the habitable zone.
@@ -137,18 +137,28 @@ The Activities overview and workspace switches show the solar system, still movi
 
 ## Status
 
-Stable: [v1.3.2](https://github.com/fqazzazee/orrery/releases/tag/v1.3.2) is the latest release.
+Stable: [v1.3.3](https://github.com/fqazzazee/orrery/releases/tag/v1.3.3) is the latest release.
 
 - **GNOME:** tested in a real GNOME Shell on 48, 49, 50 and 51, each in a container, both from source and from the installed RPM and DEB packages.
 - **Other desktops:** the `orrery-wallpaper` companion's live background is tested in Sway, and its pictures render on Fedora, Debian and Arch.
 - **Mission dates:** dates after today are the published plans, and may change.
+
+### Planned
+
+**Orrery on macOS and Windows, as a web wallpaper.** The orbits, missions and fact cards are plain JavaScript, so they can run in a browser. A small layer will let the same drawing code paint on a web canvas as well as in GNOME. The plan, in order:
+
+1. A web build of what `orrery-wallpaper` shows: the solar system moving, without the clicking.
+2. Packages for wallpaper apps that show web pages: [Lively Wallpaper](https://www.rocksdanister.com/lively/) on Windows and [Plash](https://sindresorhus.com/plash) on macOS. The same build will run live on the [project page](https://fqazzazee.github.io/orrery/).
+3. The cards, the timeline and flying in and out, rebuilt in HTML.
+
+The GNOME extension stays the main version, and both will share the same astronomy and mission code.
 
 ## Install
 
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
 ```bash
-v=1.3.2   # the release's version
+v=1.3.3   # the release's version
 url=https://github.com/fqazzazee/orrery/releases/download/v$v
 # Fedora, RHEL, openSUSE (zypper install works the same)
 sudo dnf install $url/gnome-shell-extension-orrery-$v-1.noarch.rpm
@@ -169,7 +179,7 @@ Each release lists its files' SHA-256 sums in `SHA256SUMS`. With it beside your 
 
 From a checkout, `make link` symlinks it into `~/.local/share/gnome-shell/extensions`.
 
-The scene covers the primary monitor. The overview and workspace switches show live copies of it. If you would rather see your wallpaper there, turn that off under Content › Interaction.
+The scene covers the main monitor. The others get a solar system of their own (starting at the same date, and explored separately), a copy of the main one, or the plain wallpaper, under Content › Interaction › Other monitors. The overview and workspace switches show live copies of them. If you would rather see your wallpaper there, turn that off under Content › Interaction.
 
 Clicks reach the scene wherever no window covers the desktop. A desktop-icons extension draws a window over the whole desktop, which takes those clicks instead.
 
@@ -187,7 +197,9 @@ GNOME Shell extensions only run in GNOME Shell. For **KDE Plasma, XFCE, Cinnamon
 
 ## Power and OLED care
 
-- **Stops when hidden:** animation stops whenever the desktop is hidden, by maximized or fullscreen windows, the overview or the lock screen.
+- **Stops when hidden:** with **Background only** animation (the default), it stops whenever maximized or fullscreen windows or the overview hide the desktop. **Continuous** keeps it going behind windows, and **Paused** keeps a still picture that only moves while the pointer is on the desktop. The panel on the timeline switches between the three. Nothing runs behind the lock screen.
+- **See-through apps:** pick apps, like a transparent terminal, and choose what carries on behind their windows: the animation, the music, or both.
+- **Several monitors:** it only stops once every monitor showing the solar system is hidden.
 - **Little redrawing:**
   - Planets move by translation, not relayout.
   - Each layer only redraws when it changes by most of a pixel.
@@ -223,7 +235,7 @@ make dist                    # build the zip and the rpm, deb and Arch packages 
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
-To release, push a tag like `v1.3.2` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
+To release, push a tag like `v1.3.3` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
 
 The project page lives in [`docs/`](docs). Its screenshots and clips were recorded from the extension itself, running in a headless GNOME Shell.
 

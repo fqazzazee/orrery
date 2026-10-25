@@ -1,13 +1,15 @@
 Orrery, a live, OLED-black solar system as your wallpaper, ready for extensions.gnome.org.
 
-## What's new in 1.3.2
+## What's new in 1.3.3
 
-Fixes from the extensions.gnome.org review:
+- **Every monitor.** Other monitors get a solar system of their own (starting at the same date, and explored separately), a copy of the main one, or the plain wallpaper. Orrery only pauses once every monitor showing it is hidden.
+- **Modes for the music and the animation.** Music is Muted, Background only (it fades out behind windows) or Continuous; the speaker on the timeline steps through them. The animation is Paused (a still picture that moves while you use it), Background only or Continuous.
+- **See-through apps.** Pick apps, like a transparent terminal, and choose what carries on behind their windows: the animation, the music, or both.
+- **A tidier timeline.** Spin, sunlight and the modes live in the panel behind the list button, which also opens the settings.
+- **Calmer zooming out.** Time speeds up gently as you pull back, from the planets' own pace to about 30 times that at the nearest stars, instead of jumping to ten years a second.
+- **Truer paths for the Voyagers and Pioneers.** Past their last encounter they now fly along their real direction of travel, within 0.3 AU of NASA JPL's trajectories out to 2049 (Voyager 1 was drifting 9 AU off). Pioneer 11's last signal moved 10° to where it really was, and Voyager 1 reaches one light-day from Earth on 18 November 2026.
 
-- On GNOME 49 and later, checking for maximized windows no longer touches `Meta.Window.get_maximized()`, which GNOME 49 removed.
-- Turning Orrery off now destroys every part of the scene and disconnects every signal one by one, instead of leaving them to their parents.
-- The preferences window disconnects from the settings when it closes.
-- The code names its modules in full (`Astro`, `Render`) instead of single letters, so it reads more easily.
+Settings from 1.3.2 carry over: music on or off and pausing behind windows become the matching modes.
 
 ## Install
 
@@ -15,9 +17,9 @@ Fixes from the extensions.gnome.org review:
 
 | Distribution | File | Command |
 |---|---|---|
-| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.2-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.2-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
-| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.2-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.2-1_all.deb` |
-| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.2-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.2-1-any.pkg.tar.zst` |
+| Fedora, RHEL, openSUSE | `gnome-shell-extension-orrery-1.3.3-1.noarch.rpm` | `sudo dnf install ./gnome-shell-extension-orrery-1.3.3-1.noarch.rpm` (openSUSE: `sudo zypper install ./…`) |
+| Debian 13+, Ubuntu 25.04+, Pop!_OS, Mint | `gnome-shell-extension-orrery_1.3.3-1_all.deb` | `sudo apt install ./gnome-shell-extension-orrery_1.3.3-1_all.deb` |
+| Arch, Manjaro, EndeavourOS | `gnome-shell-extension-orrery-1.3.3-1-any.pkg.tar.zst` | `sudo pacman -U gnome-shell-extension-orrery-1.3.3-1-any.pkg.tar.zst` |
 | Any distribution, just for you | `orrery@fqazzazee.github.io.shell-extension.zip` | `gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip` |
 
 **KDE Plasma, XFCE, Cinnamon, MATE, Budgie, LXQt, Sway, Hyprland and others** — install `orrery-wallpaper` (same three formats), then:
@@ -26,7 +28,7 @@ Fixes from the extensions.gnome.org review:
 - `systemctl --user enable --now orrery-wallpaper-live` instead runs an animated background on Wayland compositors with layer-shell (Sway, Hyprland, niri, labwc, river, Wayfire, COSMIC).
 - Or run `orrery-wallpaper render picture.png` for a single picture. `orrery-wallpaper --help` lists the options.
 
-`orrery-1.3.2.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
+`orrery-1.3.3.tar.gz` is the source, `PKGBUILD` and the `.spec` files build the packages, and `SHA256SUMS` checks the downloads.
 
 ## What it does
 

@@ -25,6 +25,7 @@ link:
 	@echo "Log out and back in, then: gnome-extensions enable $(UUID)"
 
 test:
+	glib-compile-schemas schemas
 	gjs -m tests/unit.js
 
 # Orrery in a real GNOME Shell of another version, in a container:
