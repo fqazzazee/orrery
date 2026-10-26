@@ -4,6 +4,8 @@ A live solar system as your wallpaper. Every planet sits where it really is, and
 
 **[The project page](https://fqazzazee.github.io/orrery/)** shows it moving: up close, from afar, and everything between.
 
+Also on Android, as an app, a live wallpaper and a screensaver: **[Orrery for Android](https://github.com/fqazzazee/orrery-android)**.
+
 [![GNOME Shell 48–51](https://img.shields.io/badge/GNOME%20Shell-48%20%C2%B7%2049%20%C2%B7%2050%20%C2%B7%2051-4A86CF?logo=gnome&logoColor=white)](#install)
 [![GJS](https://img.shields.io/badge/GJS-ES%20modules-F7DF1E?logo=javascript&logoColor=black)](https://gjs.guide)
 [![NASA JPL data](https://img.shields.io/badge/orbits-NASA%20JPL-0B3D91)](https://ssd.jpl.nasa.gov)
@@ -13,6 +15,7 @@ A live solar system as your wallpaper. Every planet sits where it really is, and
 [![Debian and Ubuntu](https://img.shields.io/badge/Debian%20%7C%20Ubuntu-deb-A81D33?logo=debian&logoColor=white)](#install)
 [![Arch](https://img.shields.io/badge/Arch-pkg-1793D1?logo=archlinux&logoColor=white)](#install)
 [![KDE, XFCE, Sway, Hyprland](https://img.shields.io/badge/also-KDE%20%C2%B7%20XFCE%20%C2%B7%20Sway%20%C2%B7%20Hyprland-555555)](#other-desktops)
+[![Android 8+](https://img.shields.io/badge/Android-8%2B-3DDC84?logo=android&logoColor=white)](#android)
 [![Latest release](https://img.shields.io/github/v/release/fqazzazee/orrery?color=FFC46B)](https://github.com/fqazzazee/orrery/releases/latest)
 
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-61AFEF)](LICENSE)
@@ -202,6 +205,12 @@ GNOME Shell extensions only run in GNOME Shell. For **KDE Plasma, XFCE, Cinnamon
   - Some desktops do not start systemd's graphical session (XFCE, MATE, LXQt). There, copy `/usr/share/orrery-wallpaper/autostart/orrery-wallpaper.desktop` to `~/.config/autostart/` instead.
 - **An animated background:** `systemctl --user enable --now orrery-wallpaper-live` runs one on Wayland compositors with layer-shell (Sway, Hyprland, niri, labwc, river, Wayfire, COSMIC). It needs `gtk4-layer-shell`.
 - **One picture:** `orrery-wallpaper render picture.png [--date 1989-08-25] [--size 3840x2160]` draws it. `orrery-wallpaper --help` lists the rest.
+
+### Android
+
+**[Orrery for Android](https://github.com/fqazzazee/orrery-android)** brings the same solar system, missions and cards to phones and tablets, with a touch interface: tap for a card, double-tap a planet to fly in, pinch out to the Oort cloud. It runs as an app, a live wallpaper for the home and lock screens, and a screensaver while charging.
+
+Download the APK from its [latest release](https://github.com/fqazzazee/orrery-android/releases/latest) and open it on the phone. It needs Android 8 or later, is about 300 KB, and asks for no permissions.
 
 ## Power and OLED care
 
