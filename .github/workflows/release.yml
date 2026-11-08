@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v1.4.0 to build every package and publish a release with
+# Push a tag like v1.5.0 to build every package and publish a release with
 # them. Run by hand to just build the packages.
 on:
   push:
@@ -45,3 +45,94 @@ jobs:
         with:
           name: orrery-packages
           path: dist/
+
+  # Orrery for Windows: the app folder as a zip, the installer and the
+  # Lively Wallpaper package, added to the release the job above made.
+  windows:
+    needs: release
+    runs-on: windows-latest
+    env:
+      # Code signing runs only once these secrets exist (Azure Artifact
+      # Signing, formerly Trusted Signing). Until then the files are unsigned.
+      SIGN: ${{ secrets.AZURE_CLIENT_ID != '' }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      # windows-latest comes with Inno Setup 6; install it if that changes.
+      - name: Inno Setup
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build the app
+        run: windows/build.ps1 -Step publish
+
+      # Signs Orrery.exe and Orrery.scr (not the .NET runtime's own files)
+      # before they are zipped and packed. Needs the secrets AZURE_TENANT_ID,
+      # AZURE_CLIENT_ID and AZURE_CLIENT_SECRET, and the variables
+      # SIGNING_ENDPOINT, SIGNING_ACCOUNT and SIGNING_PROFILE.
+      - name: Files to sign
+        id: app
+        if: env.SIGN == 'true'
+        run: |
+          $files = (Get-ChildItem dist/windows -Recurse -Include Orrery.exe, Orrery.scr).FullName -join ','
+          "files=$files" >> $env:GITHUB_OUTPUT
+
+      - name: Sign the app
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.SIGNING_PROFILE }}
+          files: ${{ steps.app.outputs.files }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Build the zips and the installers
+        run: windows/build.ps1 -Step package
+
+      - name: Sign the installers
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.SIGNING_PROFILE }}
+          files-folder: dist/windows
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Checksums
+        run: windows/build.ps1 -Step sums
+
+      - name: Add them to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem dist/windows -File | ForEach-Object { $_.FullName }
+          gh release upload $env:GITHUB_REF_NAME @files --clobber
+          if ($LASTEXITCODE) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orrery-windows
+          path: dist/windows/*.*

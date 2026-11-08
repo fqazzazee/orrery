@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Orrery for Windows: one exe that is the desktop app, the live
+       wallpaper (with its tray icon) and, renamed to Orrery.scr, the
+       screensaver. It shows the same page as Orrery for Android (../web),
+       which draws with the extension's own lib/ modules. -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Orrery</RootNamespace>
+    <AssemblyName>Orrery</AssemblyName>
+    <ApplicationIcon>orrery.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Version>1.5.0</Version>
+    <Product>Orrery</Product>
+    <Company>fqazzazee</Company>
+    <Copyright>GPL-2.0-or-later</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- The page and the modules it imports, laid out as in the Android
+       app's assets: app/web/... imports ../../lib/*.js. Only the lib/
+       modules that need no GNOME Shell. -->
+  <ItemGroup>
+    <Content Include="..\web\**\*" LinkBase="app\web" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\lib\astro.js;..\..\lib\bodies.js;..\..\lib\facts.js;..\..\lib\lunar.js;..\..\lib\missions.js;..\..\lib\moon-missions.js;..\..\lib\render.js;..\..\lib\satellites.js;..\..\lib\tour.js;..\..\lib\waypoints.js" LinkBase="app\lib" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+
+  <!-- WinForms only: the package's WPF control would pull in a second WindowsBase. -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The screensaver is the same apphost named Orrery.scr: it still runs
+       Orrery.dll, whose name is written inside it. -->
+  <Target Name="CopyScreensaver" AfterTargets="Build" Condition="'$(UseAppHost)' != 'false'">
+    <Copy SourceFiles="$(OutDir)$(AssemblyName)$(_NativeExecutableExtension)" DestinationFiles="$(OutDir)$(AssemblyName).scr" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)$(AssemblyName)$(_NativeExecutableExtension)')" />
+  </Target>
+  <Target Name="PublishScreensaver" AfterTargets="Publish" Condition="'$(UseAppHost)' != 'false'">
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName)$(_NativeExecutableExtension)" DestinationFiles="$(PublishDir)$(AssemblyName).scr" SkipUnchangedFiles="true" Condition="Exists('$(PublishDir)$(AssemblyName)$(_NativeExecutableExtension)')" />
+  </Target>
+
+</Project>

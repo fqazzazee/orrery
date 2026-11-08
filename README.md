@@ -4,7 +4,7 @@ A live solar system as your wallpaper. Every planet sits where it really is, and
 
 **[The project page](https://fqazzazee.github.io/orrery/)** shows it moving: up close, from afar, and everything between.
 
-Also on Android, as an app, a live wallpaper and a screensaver: **[Orrery for Android](https://github.com/fqazzazee/orrery-android)**.
+Also on Android, as an app, a live wallpaper and a screensaver: **[Orrery for Android](https://github.com/fqazzazee/orrery-android)**. And on Windows, as an app, a screensaver and a live wallpaper: **[Orrery for Windows](#windows)**.
 
 [![GNOME Shell 48–51](https://img.shields.io/badge/GNOME%20Shell-48%20%C2%B7%2049%20%C2%B7%2050%20%C2%B7%2051-4A86CF?logo=gnome&logoColor=white)](#install)
 [![GJS](https://img.shields.io/badge/GJS-ES%20modules-F7DF1E?logo=javascript&logoColor=black)](https://gjs.guide)
@@ -16,6 +16,7 @@ Also on Android, as an app, a live wallpaper and a screensaver: **[Orrery for An
 [![Arch](https://img.shields.io/badge/Arch-pkg-1793D1?logo=archlinux&logoColor=white)](#install)
 [![KDE, XFCE, Sway, Hyprland](https://img.shields.io/badge/also-KDE%20%C2%B7%20XFCE%20%C2%B7%20Sway%20%C2%B7%20Hyprland-555555)](#other-desktops)
 [![Android 8+](https://img.shields.io/badge/Android-8%2B-3DDC84?logo=android&logoColor=white)](#android)
+[![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%C2%B7%2011-0078D4)](#windows)
 [![Latest release](https://img.shields.io/github/v/release/fqazzazee/orrery?color=FFC46B)](https://github.com/fqazzazee/orrery/releases/latest)
 
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-61AFEF)](LICENSE)
@@ -148,19 +149,19 @@ The Activities overview and workspace switches show the solar system, still movi
 
 ## Status
 
-Stable: [v1.4.0](https://github.com/fqazzazee/orrery/releases/tag/v1.4.0) is the latest release.
+Stable: [v1.5.0](https://github.com/fqazzazee/orrery/releases/tag/v1.5.0) is the latest release.
 
 - **GNOME:** tested in a real GNOME Shell on 48, 49, 50 and 51, each in a container, both from source and from the installed RPM and DEB packages.
 - **Other desktops:** the `orrery-wallpaper` companion's live background is tested in Sway, and its pictures render on Fedora, Debian and Arch.
+- **Windows:** new, and built and tried on Windows 11. The downloads are not signed yet.
 - **Mission dates:** dates after today are the published plans, and may change.
 
 ### Planned
 
-**Orrery on macOS and Windows, as a web wallpaper.** The orbits, missions and fact cards are plain JavaScript, so they can run in a browser. A small layer will let the same drawing code paint on a web canvas as well as in GNOME. The plan, in order:
+**Orrery on macOS, as a web wallpaper.** The page that Orrery for Android and [Orrery for Windows](#windows) show already runs in a browser, cards, timeline and all. Next:
 
-1. A web build of what `orrery-wallpaper` shows: the solar system moving, without the clicking.
-2. Packages for wallpaper apps that show web pages: [Lively Wallpaper](https://www.rocksdanister.com/lively/) on Windows and [Plash](https://sindresorhus.com/plash) on macOS. The same build will run live on the [project page](https://fqazzazee.github.io/orrery/).
-3. The cards, the timeline and flying in and out, rebuilt in HTML.
+1. A package for [Plash](https://sindresorhus.com/plash), which shows web pages as the macOS wallpaper, as there is one for Lively Wallpaper on Windows.
+2. The same page running live on the [project page](https://fqazzazee.github.io/orrery/).
 
 The GNOME extension stays the main version, and both will share the same astronomy and mission code.
 
@@ -169,7 +170,7 @@ The GNOME extension stays the main version, and both will share the same astrono
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
 ```bash
-v=1.4.0   # the release's version
+v=1.5.0   # the release's version
 url=https://github.com/fqazzazee/orrery/releases/download/v$v
 # Fedora, RHEL, openSUSE (zypper install works the same)
 sudo dnf install $url/gnome-shell-extension-orrery-$v-1.noarch.rpm
@@ -212,6 +213,26 @@ GNOME Shell extensions only run in GNOME Shell. For **KDE Plasma, XFCE, Cinnamon
 
 Download the APK from its [latest release](https://github.com/fqazzazee/orrery-android/releases/latest) and open it on the phone. It needs Android 8 or later, is about 300 KB, and asks for no permissions.
 
+### Windows
+
+**Orrery for Windows** shows the same page as the Android app: the cards, the timeline, the stories and the settings. It comes as three things in one:
+
+- **An app**, with the timeline, the panel and the settings. F11 makes it full screen.
+- **A screensaver** on every screen, with its own settings in Windows' Screen Saver Settings.
+- **A live wallpaper** behind your desktop icons, with a tray icon.
+
+From the [latest release](https://github.com/fqazzazee/orrery/releases/latest), on Windows 10 or 11 (x64 or Arm):
+
+- **`Orrery-1.5.0-win-x64-setup.exe`** installs it just for you, with no admin rights. It can make Orrery your screensaver and start the live wallpaper with Windows. The settings page has the same switches later on.
+- **`Orrery-1.5.0-win-x64.zip`** is the same, to unzip anywhere and run `Orrery.exe`. Right-click `Orrery.scr` and choose **Install** to use it as the screensaver.
+- **`Orrery-1.5.0-lively.zip`** is for [Lively Wallpaper](https://www.rocksdanister.com/lively/): drag it into Lively's window.
+
+The `-arm64` files are for Arm PCs. Orrery needs the Microsoft Edge WebView2 Runtime, which comes with Windows 11; the installer fetches it if it is missing. `SHA256SUMS-windows` checks the downloads.
+
+The downloads are not signed yet, so Windows SmartScreen may say it "protected your PC". Click **More info**, then **Run anyway**. For the zip, you can instead right-click it, open **Properties** and tick **Unblock** before unzipping.
+
+Building it yourself is described in [`windows/README.md`](windows/README.md).
+
 ## Power and OLED care
 
 - **Stops when hidden:** with **Background only** animation (the default), it stops whenever maximized or fullscreen windows or the overview hide the desktop. **Continuous** keeps it going behind windows, and **Paused** keeps a still picture that only moves while the pointer is on the desktop. The panel on the timeline switches between the three. Nothing runs behind the lock screen.
@@ -252,7 +273,9 @@ make dist                    # build the zip and the rpm, deb and Arch packages 
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
-To release, push a tag like `v1.4.0` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release.
+To release, push a tag like `v1.5.0` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release, with the Windows zips, installers and Lively package added by a second job.
+
+The Windows app lives in [`windows/`](windows); `windows/build.ps1` builds its packages into `dist/windows/` (see [`windows/README.md`](windows/README.md)).
 
 The project page lives in [`docs/`](docs). Its screenshots and clips were recorded from the extension itself, running in a headless GNOME Shell.
 

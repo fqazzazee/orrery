@@ -5,11 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orrery — the solar system, live on your desktop</title>
-  <meta name="description" content="Orrery turns your Linux desktop into a live solar system: planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, drawn in pure black for OLED screens. A GNOME Shell extension for GNOME 48 to 51, with a companion for KDE, XFCE, Sway, Hyprland and more, and an app for Android.">
+  <meta name="description" content="Orrery turns your Linux desktop into a live solar system: planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, drawn in pure black for OLED screens. A GNOME Shell extension for GNOME 48 to 51, with a companion for KDE, XFCE, Sway, Hyprland and more, and apps for Windows and Android.">
   <meta name="theme-color" content="#000000">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Orrery — the solar system, live on your desktop">
-  <meta property="og:description" content="Planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, in pure OLED black. For GNOME, KDE, XFCE, Sway, Hyprland and more, and Android.">
+  <meta property="og:description" content="Planets where they really are, over 100 spacecraft on their real paths, moons, comets and the Oort cloud, in pure OLED black. For GNOME, KDE, XFCE, Sway, Hyprland and more, Windows and Android.">
   <meta property="og:url" content="https://fqazzazee.github.io/orrery/">
   <meta property="og:image" content="https://fqazzazee.github.io/orrery/social-preview.png">
   <meta property="og:image:width" content="1280">
@@ -71,16 +71,17 @@
     <p class="sub">Click a planet for its story, fly in to its moons and satellites, scrub through
       sixty years of missions, or pull back past the Voyagers to the Oort cloud. All of it in
       <b>pure black for OLED screens</b>. A <b>GNOME Shell extension</b>, with a companion for
-      <b>KDE, XFCE, Cinnamon, Sway, Hyprland</b> and more. Also on <b><a href="#android">Android</a></b>,
-      as an app, a live wallpaper and a screensaver.</p>
+      <b>KDE, XFCE, Cinnamon, Sway, Hyprland</b> and more. Also on <b><a href="#windows">Windows</a></b> and
+      <b><a href="#android">Android</a></b>, as an app, a live wallpaper and a screensaver.</p>
     <div class="actions">
-      <a class="button primary" href="#install">Install v1.4.0</a>
+      <a class="button primary" href="#install">Install v1.5.0</a>
       <a class="button" href="https://github.com/fqazzazee/orrery/releases/latest">Releases</a>
       <a class="button" href="https://github.com/fqazzazee/orrery">Source on GitHub</a>
+      <a class="button" href="#windows">Windows</a>
       <a class="button" href="https://github.com/fqazzazee/orrery-android">Android</a>
     </div>
     <div class="versions">
-      <span>GNOME 48 · 49 · 50 · 51</span><span>Fedora · Debian · Ubuntu · Arch</span><span>KDE · XFCE · Sway · Hyprland</span><span>Android 8+</span>
+      <span>GNOME 48 · 49 · 50 · 51</span><span>Fedora · Debian · Ubuntu · Arch</span><span>KDE · XFCE · Sway · Hyprland</span><span>Windows 10 · 11</span><span>Android 8+</span>
     </div>
     <div class="screen">
       <video src="media/hero.mp4" poster="screenshots/desktop.webp" autoplay muted loop playsinline
@@ -307,15 +308,15 @@
         out and back in and turn on Orrery in Extensions.</p>
       <div class="distros">
         <div><h3>Fedora, RHEL, openSUSE</h3>
-<pre class="term"><span class="p">$ </span>sudo dnf install https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery-1.4.0-1.noarch.rpm</pre></div>
+<pre class="term"><span class="p">$ </span>sudo dnf install https://github.com/fqazzazee/orrery/releases/download/v1.5.0/gnome-shell-extension-orrery-1.5.0-1.noarch.rpm</pre></div>
         <div><h3>Debian 13+, Ubuntu 25.04+, Mint, Pop!_OS</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery_1.4.0-1_all.deb
-<span class="p">$ </span>sudo apt install ./gnome-shell-extension-orrery_1.4.0-1_all.deb</pre></div>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.5.0/gnome-shell-extension-orrery_1.5.0-1_all.deb
+<span class="p">$ </span>sudo apt install ./gnome-shell-extension-orrery_1.5.0-1_all.deb</pre></div>
         <div><h3>Arch, Manjaro, EndeavourOS</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/gnome-shell-extension-orrery-1.4.0-1-any.pkg.tar.zst
-<span class="p">$ </span>sudo pacman -U gnome-shell-extension-orrery-1.4.0-1-any.pkg.tar.zst</pre></div>
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.5.0/gnome-shell-extension-orrery-1.5.0-1-any.pkg.tar.zst
+<span class="p">$ </span>sudo pacman -U gnome-shell-extension-orrery-1.5.0-1-any.pkg.tar.zst</pre></div>
         <div><h3>Any distribution, just for you</h3>
-<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.4.0/orrery@fqazzazee.github.io.shell-extension.zip
+<pre class="term"><span class="p">$ </span>curl -LO https://github.com/fqazzazee/orrery/releases/download/v1.5.0/orrery@fqazzazee.github.io.shell-extension.zip
 <span class="p">$ </span>gnome-extensions install orrery@fqazzazee.github.io.shell-extension.zip</pre></div>
       </div>
       <p class="label" style="margin-top: 22px">then, after logging back in</p>
@@ -338,6 +339,19 @@
         </div>
         <div class="screen"><img src="screenshots/other-desktops.webp" width="1920" height="1080" loading="lazy"
              alt="The picture orrery-wallpaper draws: the solar system today with the missions in flight and a fact card"></div>
+      </div>
+
+      <div id="windows" style="margin-top: 50px; scroll-margin-top: 70px">
+        <h3>On Windows? Orrery for Windows</h3>
+        <p style="max-width: 820px">The same solar system, missions and cards on Windows 10 and 11, three ways in one
+          install: an <b>app</b> with the timeline and the settings, a <b>screensaver</b> on every screen
+          that plays the mission stories, and a <b>live wallpaper</b> behind your desktop icons that
+          pauses while a window covers it. The installer needs no admin rights. The downloads are not
+          signed yet, so SmartScreen may ask: click <b>More info</b>, then <b>Run anyway</b>.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/fqazzazee/orrery/releases/download/v1.5.0/Orrery-1.5.0-win-x64-setup.exe">Download the installer</a>
+          <a class="button" href="https://github.com/fqazzazee/orrery/releases/latest">Zip, Arm and Lively downloads</a>
+        </div>
       </div>
 
       <div id="android" style="margin-top: 50px; scroll-margin-top: 70px">
