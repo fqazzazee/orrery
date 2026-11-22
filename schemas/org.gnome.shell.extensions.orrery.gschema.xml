@@ -210,6 +210,36 @@
       <range min="5" max="100"/><default>40</default>
       <summary>Brightness while dimmed, percent of normal</summary>
     </key>
+    <key name="screensaver" type="b">
+      <default>false</default>
+      <summary>Show the solar system fullscreen, over the windows, when the computer sits idle</summary>
+    </key>
+    <key name="screensaver-minutes" type="i">
+      <range min="1" max="60"/><default>5</default>
+      <summary>Minutes without input before the screensaver starts</summary>
+    </key>
+    <key name="screensaver-on-battery" type="b">
+      <default>false</default>
+      <summary>Run the screensaver on battery too</summary>
+    </key>
+    <key name="screensaver-scene" type="s">
+      <choices><choice value="wallpaper"/><choice value="planets"/><choice value="stories"/><choice value="mission"/></choices>
+      <default>'wallpaper'</default>
+      <summary>What the screensaver plays: the wallpaper as it is, planet flybys, every mission's story, or one mission's</summary>
+    </key>
+    <key name="screensaver-mission" type="s">
+      <default>'voyager1'</default>
+      <summary>The mission whose story the screensaver tells</summary>
+    </key>
+    <key name="screensaver-content" type="s">
+      <choices><choice value="wallpaper"/><choice value="custom"/></choices>
+      <default>'wallpaper'</default>
+      <summary>Draw the same things as the wallpaper, or the screensaver's own choice</summary>
+    </key>
+    <key name="screensaver-show" type="as">
+      <default>['show-orbits', 'show-labels', 'show-stars', 'show-belts', 'show-pluto', 'show-moons', 'show-small-bodies', 'show-missions', 'show-trails', 'show-hud']</default>
+      <summary>What the screensaver draws when it has its own choice</summary>
+    </key>
     <key name="pixel-shift" type="b">
       <default>true</default>
       <summary>Drift the whole scene a few pixels over time to spread OLED wear</summary>
