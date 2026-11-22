@@ -7,7 +7,7 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 import {MISSIONS} from './lib/missions.js';
 import {placeName} from './lib/bodies.js';
-import {migrateSettings} from './lib/settings.js';
+import {SCREENSAVER_CONTENT, migrateSettings} from './lib/settings.js';
 
 function appIcon(app) {
     const icon = app?.get_icon();
@@ -34,6 +34,7 @@ export default class OrreryPreferences extends ExtensionPreferences {
         window.add(this._contentPage());
         window.add(this._missionsPage());
         window.add(this._musicPage());
+        window.add(this._screensaverPage());
         window.add(this._powerPage());
     }
 
@@ -249,14 +250,68 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._spin('Dim after', 'idle-dim-minutes', 0, 60, 1, 'Minutes without keyboard or mouse input; 0 never dims'),
             idleBrightness,
         ], 'Dimming also drops the frame rate to 10. Moving the pointer brings everything back at once.'));
+        page.add(this._group('OLED care', [
+            this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
+        ]));
+        return page;
+    }
+
+    _screensaverPage() {
+        const page = new Adw.PreferencesPage({title: 'Screensaver', icon_name: 'weather-clear-night-symbolic'});
         page.add(this._group('Screensaver', [
             this._switch('Screensaver', 'screensaver', 'The solar system fullscreen over your windows when the computer sits idle'),
             this._dependsOn(this._spin('Starts after', 'screensaver-minutes', 1, 60, 1, 'Minutes without keyboard or mouse input'), 'screensaver'),
             this._dependsOn(this._switch('Run on battery', 'screensaver-on-battery'), 'screensaver'),
         ], 'Any key or mouse movement ends it. It waits while a video, Caffeine or a fullscreen app keeps the screen on. Locking and sleep still follow GNOME’s own settings.'));
-        page.add(this._group('OLED care', [
-            this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
-        ]));
+
+        const stories = MISSIONS.filter(m => m.group !== 'observatory')
+            .sort((a, b) => a.events[0].date.localeCompare(b.events[0].date));
+        const mission = this._combo('Mission', 'screensaver-mission',
+            stories.map(m => [m.id, `${m.short ?? m.name} · ${m.events[0].date.slice(0, 4)}`]));
+        const plays = this._group('What it plays', [
+            this._combo('Scene', 'screensaver-scene', [
+                ['wallpaper', 'Same as the wallpaper'],
+                ['planets', 'Planet flybys'],
+                ['stories', 'Every mission story'],
+                ['mission', 'One mission story'],
+            ]),
+            mission,
+            this._combo('What to draw', 'screensaver-content', [
+                ['wallpaper', 'Same as the wallpaper'],
+                ['custom', 'My own choice'],
+            ]),
+        ], 'Tours loop until you come back, and leave the wallpaper where it was.');
+        page.add(this._dependsOn(plays, 'screensaver'));
+
+        const shown = new Adw.PreferencesGroup({
+            title: 'Drawn on the screensaver',
+            description: 'With Spacecraft on, every mission flies, even ones turned off for the wallpaper.',
+        });
+        const rows = new Map();
+        for (const [key, title] of SCREENSAVER_CONTENT) {
+            const row = new Adw.SwitchRow({title, active: this._settings.get_strv('screensaver-show').includes(key)});
+            row.connect('notify::active', () => {
+                const list = this._settings.get_strv('screensaver-show');
+                if (row.active !== list.includes(key))
+                    this._settings.set_strv('screensaver-show', row.active ? [...list, key] : list.filter(k => k !== key));
+            });
+            rows.set(key, row);
+            shown.add(row);
+        }
+        page.add(this._dependsOn(shown, 'screensaver'));
+
+        const sync = () => {
+            mission.sensitive = this._settings.get_string('screensaver-scene') === 'mission';
+            shown.visible = this._settings.get_string('screensaver-content') === 'custom';
+        };
+        sync();
+        this._watch('changed::screensaver-scene', sync);
+        this._watch('changed::screensaver-content', sync);
+        this._watch('changed::screensaver-show', () => {
+            const list = this._settings.get_strv('screensaver-show');
+            for (const [key, row] of rows)
+                row.active = list.includes(key);
+        });
         return page;
     }
 

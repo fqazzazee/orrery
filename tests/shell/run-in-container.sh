@@ -65,7 +65,7 @@ gsettings set org.gnome.shell disable-extension-version-validation true
 gsettings set org.gnome.shell enabled-extensions "[\"orrery@fqazzazee.github.io\", \"orrery-tester@local\"]"
 gnome-shell --headless --wayland --no-x11 --virtual-monitor 1920x1080 --virtual-monitor 1280x1024 > /out/log.txt 2>&1 &
 PID=$!
-for i in $(seq 1 260); do [ -f /out/done ] && break; sleep 1; done
+for i in $(seq 1 400); do [ -f /out/done ] && break; sleep 1; done
 kill $PID; wait $PID 2>/dev/null' >/dev/null 2>&1
 cat /tmp/progress
 grep -E "ORRERY-TEST|JS ERROR|JS WARNING|TypeError|ReferenceError|SyntaxError|Orrery:" -A3 /out/log.txt | grep -v "^--$" | head -40

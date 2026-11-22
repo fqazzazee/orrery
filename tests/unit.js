@@ -9,7 +9,7 @@ import {BODIES, LAGRANGE, MOONS, SMALL_BODIES} from '../lib/bodies.js';
 import {bodyDetails, details, missionDetails, missionStatus} from '../lib/facts.js';
 import {buildTrajectories} from '../lib/missions.js';
 import {sunlightColor} from '../lib/render.js';
-import {migrateSettings} from '../lib/settings.js';
+import {SCREENSAVER_CONTENT, ScreensaverSettings, migrateSettings} from '../lib/settings.js';
 import {GM} from '../lib/bodies.js';
 import {SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
 import {TOUR_PLANETS, planSpan, planetTour, storyPlan} from '../lib/tour.js';
@@ -307,6 +307,33 @@ check(near(Astro.inclinationDeg(Astro.planetOrbit('mercury', Astro.J2000)), 7.0,
     const v1 = storyPlan(buildTrajectories().find(x => x.mission.id === 'voyager1'));
     check(v1.some(s => s.view === 'jupiter') && v1.some(s => s.view === 'saturn') && v1.some(s => s.view === 'far'),
         'Voyager 1’s story: Jupiter, Saturn, then out past the planets');
+}
+
+// What a screensaver scene sees: the wallpaper's settings but for its own.
+{
+    const fake = values => ({
+        get_boolean: k => values[k], get_string: k => values[k], get_strv: k => values[k],
+        set_boolean: () => {
+            throw new Error('wrote a setting');
+        },
+    });
+    const base = {
+        'screensaver-scene': 'wallpaper', 'screensaver-content': 'wallpaper', 'screensaver-show': ['show-stars'],
+        'show-orbits': true, 'show-stars': false, 'show-missions': false, 'disabled-missions': ['apollo11'], 'interactive': true,
+    };
+    let view = new ScreensaverSettings(fake(base));
+    check(view.get_boolean('show-orbits') && !view.get_boolean('show-stars') && view.get_strv('disabled-missions').length === 1,
+        'screensaver: follows the wallpaper by default');
+    check(!view.get_boolean('interactive') && view.get_string('timeline') === 'never' && view.get_string('tour') === 'off',
+        'screensaver: no controls, and it starts its own tour');
+    view.set_boolean('show-orbits', false);
+    check(view.get_boolean('show-orbits'), 'screensaver: cannot change the wallpaper’s settings');
+    view = new ScreensaverSettings(fake({...base, 'screensaver-content': 'custom'}));
+    check(SCREENSAVER_CONTENT.every(([key]) => view.get_boolean(key) === (key === 'show-stars')) && !view.get_strv('disabled-missions').length,
+        'screensaver: its own choice of what to draw');
+    view = new ScreensaverSettings(fake({...base, 'screensaver-scene': 'stories'}));
+    check(view.get_boolean('show-missions') && !view.get_strv('disabled-missions').length && view.get_boolean('show-orbits'),
+        'screensaver: stories show their craft even if the wallpaper hides them');
 }
 
 print(failed ? `\n${failed} failed` : '\nall passed');

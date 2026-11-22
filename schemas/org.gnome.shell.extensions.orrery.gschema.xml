@@ -222,6 +222,24 @@
       <default>false</default>
       <summary>Run the screensaver on battery too</summary>
     </key>
+    <key name="screensaver-scene" type="s">
+      <choices><choice value="wallpaper"/><choice value="planets"/><choice value="stories"/><choice value="mission"/></choices>
+      <default>'wallpaper'</default>
+      <summary>What the screensaver plays: the wallpaper as it is, planet flybys, every mission's story, or one mission's</summary>
+    </key>
+    <key name="screensaver-mission" type="s">
+      <default>'voyager1'</default>
+      <summary>The mission whose story the screensaver tells</summary>
+    </key>
+    <key name="screensaver-content" type="s">
+      <choices><choice value="wallpaper"/><choice value="custom"/></choices>
+      <default>'wallpaper'</default>
+      <summary>Draw the same things as the wallpaper, or the screensaver's own choice</summary>
+    </key>
+    <key name="screensaver-show" type="as">
+      <default>['show-orbits', 'show-labels', 'show-stars', 'show-belts', 'show-pluto', 'show-moons', 'show-small-bodies', 'show-missions', 'show-trails', 'show-hud']</default>
+      <summary>What the screensaver draws when it has its own choice</summary>
+    </key>
     <key name="pixel-shift" type="b">
       <default>true</default>
       <summary>Drift the whole scene a few pixels over time to spread OLED wear</summary>

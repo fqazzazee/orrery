@@ -245,6 +245,59 @@ export default class Tester extends Extension {
         log(`screensaver once allowed: started ${await until(saver)} overlays ${overlay()} modal ${Main.modalCount} paused ${o.stateObj._paused}`);
         await wait(2000);
         await shot('screensaver');
+        log(`screensaver follows the wallpaper: own scenes ${o.stateObj._saverScenes.length}`);
+
+        // Scenes of its own, leaving the wallpaper as it was.
+        const ext = o.stateObj, wallpaper = ext._scene, makeScenes = ext._makeSaverScenes;
+        ext._makeSaverScenes = function (root) {
+            const t = GLib.get_monotonic_time();
+            const made = makeScenes.call(this, root);
+            log(`screensaver scenes built: ${made.length} in ${Math.round((GLib.get_monotonic_time() - t) / 1000)} ms`);
+            return made;
+        };
+        const restart = async () => {
+            ext._screensaver.stop({fade: false});
+            return until(saver);
+        };
+        const first = () => ext._saverScenes[0];
+        const jdBefore = wallpaper.jd, disabledBefore = s.get_strv('disabled-missions');
+
+        s.set_string('screensaver-scene', 'planets');
+        await restart();
+        await wait(5000);
+        log(`screensaver flybys: scenes ${ext._saverScenes.length} tour ${first()?._tour?.name} view ${first()?._focus?.id ?? 'system'} wallpaper tour ${wallpaper._tour} paused ${ext._paused}`);
+        await shot('screensaver-flyby');
+
+        s.set_string('screensaver-scene', 'mission');
+        s.set_string('screensaver-mission', 'apollo11');
+        await restart();
+        await wait(3000);
+        log(`screensaver one story: ${first()?._tour?.name} craft ${first()?._trajectories.length}`);
+        await shot('screensaver-story');
+
+        s.set_strv('disabled-missions', wallpaper._trajectories.map(t => t.mission.id));
+        s.set_string('screensaver-scene', 'stories');
+        await restart();
+        await wait(1500);
+        log(`screensaver every story, all turned off on the wallpaper: ${first()?._tour?.ids.length} stories, at ${first()?._tour?.name}`);
+        s.set_strv('disabled-missions', disabledBefore);
+
+        s.set_string('screensaver-scene', 'wallpaper');
+        s.set_string('screensaver-content', 'custom');
+        s.set_strv('screensaver-show', ['show-stars', 'show-hud']);
+        await restart();
+        await wait(1500);
+        log(`screensaver own content: orbits ${first()?._settings.get_boolean('show-orbits')} stars ${first()?._settings.get_boolean('show-stars')} wallpaper orbits ${s.get_boolean('show-orbits')}`);
+        await shot('screensaver-custom');
+        s.reset('screensaver-content');
+        s.reset('screensaver-show');
+        log(`screensaver left the wallpaper alone: date moved ${Math.abs(wallpaper.jd - jdBefore) < 400} tour ${wallpaper._tour} tour setting ${s.get_string('tour')}`);
+        ext._makeSaverScenes = makeScenes;
+
+        // The rest with a flyby playing, the most there is to clean up.
+        s.set_string('screensaver-scene', 'planets');
+        await restart();
+        await wait(3000);
 
         Main.screenShield.lock(false);
         await until(() => Main.screenShield.locked, 5000);
@@ -253,7 +306,7 @@ export default class Tester extends Extension {
         await shot('screensaver-locked');
         Main.screenShield.deactivate(false);
         await until(() => !Main.screenShield.locked && Main.extensionManager.lookup(UUID).state === 1, 8000);
-        log(`screensaver after unlock: locked ${Main.screenShield.locked} restarted ${await until(saver)}`);
+        log(`screensaver after unlock: locked ${Main.screenShield.locked} restarted ${await until(saver)} other monitors with a scene ${o.stateObj._others.filter(x => x.scene).length}`);
 
         Main.extensionManager.disableExtension(UUID);
         await wait(500);
@@ -267,10 +320,22 @@ export default class Tester extends Extension {
         await wait(60);
         log(`screensaver on input: active ${saver()} still holding input ${Main.modalCount === 1}`);
         await wait(700);
-        log(`screensaver after input: overlays ${overlay()} modal ${Main.modalCount}`);
+        log(`screensaver after input: overlays ${overlay()} modal ${Main.modalCount} scenes ${o.stateObj._saverScenes.length}`);
 
-        o.stateObj._settings.reset('screensaver');
-        o.stateObj._settings.reset('screensaver-minutes');
+        // Its page in the preferences, with every row showing.
+        const settings = o.stateObj._settings;
+        settings.set_string('screensaver-scene', 'mission');
+        settings.set_string('screensaver-content', 'custom');
+        const prefs = Gio.Subprocess.new(['gjs', '-m', '/tester/prefs-page.js', `${o.path}`], Gio.SubprocessFlags.NONE);
+        const opened = await until(() => global.get_window_actors().some(a => a.meta_window.get_title() === 'Orrery page check'), 12000);
+        await wait(1500);
+        log(`screensaver preferences page opened ${opened}`);
+        await shot('screensaver-prefs');
+        prefs.force_exit();
+        await wait(500);
+
+        for (const key of ['screensaver', 'screensaver-minutes', 'screensaver-scene', 'screensaver-mission', 'screensaver-content'])
+            settings.reset(key);
         Gio.bus_unown_name(owner);
         exported.unexport();
     }
