@@ -75,6 +75,8 @@ Scroll down on the desktop to pull back. You pass Neptune and the Kuiper belt, t
 
 The Activities overview and workspace switches show the solar system, still moving. The timeline's buttons pause and play, change the speed, stop the spin, play music, show and hide things, and open the settings.
 
+**Screensaver:** turn it on in the preferences and the solar system fills every monitor when the computer sits idle. It can show the wallpaper as it is, fly past the planets, play every mission's story or loop one, and draw its own choice of things. Any key or mouse movement ends it. It runs on AC unless you allow battery, waits while a video, Caffeine or a fullscreen app keeps the screen on, and leaves locking and sleep to GNOME.
+
 <table>
   <tr>
     <td width="50%"><img alt="The show-and-hide panel open on the desktop, with chips for orbits, names, moons and every mission" src="docs/screenshots/panel.webp"></td>
@@ -149,7 +151,7 @@ The Activities overview and workspace switches show the solar system, still movi
 
 ## Status
 
-Stable: [v1.5.0](https://github.com/fqazzazee/orrery/releases/tag/v1.5.0) is the latest release.
+Stable: [v1.6.0](https://github.com/fqazzazee/orrery/releases/tag/v1.6.0) is the latest release.
 
 - **GNOME:** tested in a real GNOME Shell on 48, 49, 50 and 51, each in a container, both from source and from the installed RPM and DEB packages.
 - **Other desktops:** the `orrery-wallpaper` companion's live background is tested in Sway, and its pictures render on Fedora, Debian and Arch.
@@ -170,7 +172,7 @@ The GNOME extension stays the main version, and both will share the same astrono
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest). Orrery runs on **GNOME 48, 49, 50 and 51**.
 
 ```bash
-v=1.5.0   # the release's version
+v=1.6.0   # the release's version
 url=https://github.com/fqazzazee/orrery/releases/download/v$v
 # Fedora, RHEL, openSUSE (zypper install works the same)
 sudo dnf install $url/gnome-shell-extension-orrery-$v-1.noarch.rpm
@@ -223,9 +225,9 @@ Download the APK from its [latest release](https://github.com/fqazzazee/orrery-a
 
 From the [latest release](https://github.com/fqazzazee/orrery/releases/latest), on Windows 10 or 11 (x64 or Arm):
 
-- **`Orrery-1.5.0-win-x64-setup.exe`** installs it just for you, with no admin rights. It can make Orrery your screensaver and start the live wallpaper with Windows. The settings page has the same switches later on.
-- **`Orrery-1.5.0-win-x64.zip`** is the same, to unzip anywhere and run `Orrery.exe`. Right-click `Orrery.scr` and choose **Install** to use it as the screensaver.
-- **`Orrery-1.5.0-lively.zip`** is for [Lively Wallpaper](https://www.rocksdanister.com/lively/): drag it into Lively's window.
+- **`Orrery-1.6.0-win-x64-setup.exe`** installs it just for you, with no admin rights. It can make Orrery your screensaver and start the live wallpaper with Windows. The settings page has the same switches later on.
+- **`Orrery-1.6.0-win-x64.zip`** is the same, to unzip anywhere and run `Orrery.exe`. Right-click `Orrery.scr` and choose **Install** to use it as the screensaver.
+- **`Orrery-1.6.0-lively.zip`** is for [Lively Wallpaper](https://www.rocksdanister.com/lively/): drag it into Lively's window.
 
 The `-arm64` files are for Arm PCs. Orrery needs the Microsoft Edge WebView2 Runtime, which comes with Windows 11; the installer fetches it if it is missing. `SHA256SUMS-windows` checks the downloads.
 
@@ -273,7 +275,7 @@ make dist                    # build the zip and the rpm, deb and Arch packages 
 tools/fit-waypoints.py [id]  # refit mission waypoints against JPL Horizons (needs network)
 ```
 
-To release, push a tag like `v1.5.0` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release, with the Windows zips, installers and Lively package added by a second job.
+To release, push a tag like `v1.6.0` that matches `version-name` in `metadata.json`. GitHub Actions then builds every package and publishes them as a release, with the Windows zips, installers and Lively package added by a second job.
 
 The Windows app lives in [`windows/`](windows); `windows/build.ps1` builds its packages into `dist/windows/` (see [`windows/README.md`](windows/README.md)).
 
