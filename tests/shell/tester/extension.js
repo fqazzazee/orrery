@@ -1,3 +1,4 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
@@ -202,10 +203,75 @@ export default class Tester extends Extension {
         Main.overview.hide();
         await wait(1000);
         log('own mode again ' + others());
+        await this._screensaver(o);
         Main.extensionManager.disableExtension('orrery@fqazzazee.github.io');
         await wait(1000);
         Main.extensionManager.enableExtension('orrery@fqazzazee.github.io');
         await wait(1500);
         log('re-enabled state ' + Main.extensionManager.lookup('orrery@fqazzazee.github.io').state);
+    }
+
+    // Held off by an inhibitor, gone under the lock screen and when the
+    // extension stops, and ended by input that it swallows. Nothing has
+    // touched the virtual seat, so the session is already idle.
+    async _screensaver(o) {
+        const UUID = 'orrery@fqazzazee.github.io';
+        const overlay = () => Main.uiGroup.get_children().filter(a => a.name === 'orrery-screensaver').length;
+        const until = async (f, ms = 15000) => {
+            for (let t = 0; t < ms && !f(); t += 100)
+                await wait(100);
+            return !!f();
+        };
+        const saver = () => !!o.stateObj?._screensaver?.active;
+
+        // A stand-in for the session manager, with something inhibiting idle.
+        const session = {inhibited: true, IsInhibited() {
+            return this.inhibited;
+        }};
+        const exported = Gio.DBusExportedObject.wrapJSObject(`<node><interface name="org.gnome.SessionManager">
+            <method name="IsInhibited"><arg type="u" direction="in"/><arg type="b" direction="out"/></method>
+            </interface></node>`, session);
+        exported.export(Gio.DBus.session, '/org/gnome/SessionManager');
+        const owner = Gio.bus_own_name_on_connection(Gio.DBus.session, 'org.gnome.SessionManager', Gio.BusNameOwnerFlags.NONE, null, null);
+        await wait(300);
+
+        const s = o.stateObj._settings;
+        s.set_int('screensaver-minutes', 1);
+        s.set_boolean('screensaver', true);
+        await until(() => global.backend.get_core_idle_monitor().get_idletime() > 61000, 65000);
+        await wait(3000);
+        log(`screensaver while inhibited: active ${saver()} overlays ${overlay()}`);
+        session.inhibited = false;
+        log(`screensaver once allowed: started ${await until(saver)} overlays ${overlay()} modal ${Main.modalCount} paused ${o.stateObj._paused}`);
+        await wait(2000);
+        await shot('screensaver');
+
+        Main.screenShield.lock(false);
+        await until(() => Main.screenShield.locked, 5000);
+        await wait(1000);
+        log(`screensaver at lock: locked ${Main.screenShield.locked} overlays ${overlay()} orrery state ${Main.extensionManager.lookup(UUID).state}`);
+        await shot('screensaver-locked');
+        Main.screenShield.deactivate(false);
+        await until(() => !Main.screenShield.locked && Main.extensionManager.lookup(UUID).state === 1, 8000);
+        log(`screensaver after unlock: locked ${Main.screenShield.locked} restarted ${await until(saver)}`);
+
+        Main.extensionManager.disableExtension(UUID);
+        await wait(500);
+        log(`screensaver at disable: overlays ${overlay()} modal ${Main.modalCount}`);
+        Main.extensionManager.enableExtension(UUID);
+        log(`screensaver after enable: restarted ${await until(saver)}`);
+
+        const seat = global.stage.context.get_backend().get_default_seat();
+        const pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        pointer.notify_relative_motion(GLib.get_monotonic_time(), 8, 8);
+        await wait(60);
+        log(`screensaver on input: active ${saver()} still holding input ${Main.modalCount === 1}`);
+        await wait(700);
+        log(`screensaver after input: overlays ${overlay()} modal ${Main.modalCount}`);
+
+        o.stateObj._settings.reset('screensaver');
+        o.stateObj._settings.reset('screensaver-minutes');
+        Gio.bus_unown_name(owner);
+        exported.unexport();
     }
 }

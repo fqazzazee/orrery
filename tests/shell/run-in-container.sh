@@ -9,9 +9,25 @@ if [ -n "${INSTALL:-}" ]; then
 fi
 step() { echo "$(date +%T) $*" >> /tmp/progress; }
 step start
-mkdir -p /run/dbus && (dbus-daemon --system --fork 2>/dev/null || true)
+# The shell only has a lock screen with a display manager and a login session.
+mkdir -p /run/dbus /run/systemd/seats /etc/dbus-1/system.d
+cat > /etc/dbus-1/system.d/orrery-test.conf <<'POLICY'
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="root"><allow own="org.gnome.DisplayManager"/></policy>
+  <policy context="default"><allow send_destination="org.gnome.DisplayManager"/></policy>
+</busconfig>
+POLICY
+(dbus-daemon --system --fork 2>/dev/null || true)
 (python3 -m dbusmock --system --template logind >/tmp/logind.log 2>&1 &)
+(python3 -m dbusmock --system org.gnome.DisplayManager /org/gnome/DisplayManager/Manager org.gnome.DisplayManager.Manager >/tmp/gdm.log 2>&1 &)
 sleep 1
+gdm_mock() { gdbus call --system -d org.gnome.DisplayManager -o /org/gnome/DisplayManager/Manager -m "org.freedesktop.DBus.Mock.$1" org.gnome.DisplayManager.Manager "${@:2}" >/dev/null; }
+gdm_mock AddProperty Version "<'50.0'>"
+gdm_mock AddMethod RegisterSession 'a{sv}' '' ''
+gdbus call --system -d org.freedesktop.login1 -o /org/freedesktop/login1 -m org.freedesktop.DBus.Mock.AddSession c1 seat0 0 root true >/dev/null
+export XDG_SESSION_ID=c1
 step buses
 export XDG_RUNTIME_DIR=/tmp/run XDG_DATA_HOME=/tmp/data XDG_CONFIG_HOME=/tmp/config
 mkdir -p $XDG_RUNTIME_DIR $XDG_DATA_HOME/gnome-shell/extensions && chmod 700 $XDG_RUNTIME_DIR

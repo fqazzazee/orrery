@@ -20,6 +20,7 @@ import {MISSIONS, buildTrajectories} from './lib/missions.js';
 import {Music} from './lib/music.js';
 import {PowerMonitor} from './lib/power.js';
 import * as Render from './lib/render.js';
+import {Screensaver} from './lib/screensaver.js';
 import {MUSIC_MODES, migrateSettings, nextMode} from './lib/settings.js';
 import {planSpan, planetTour, storyPlan} from './lib/tour.js';
 import {Card, LayersPanel, StoryBar, Timeline, label} from './lib/ui.js';
@@ -31,6 +32,7 @@ const SCHEDULE_KEYS = ['fps', 'battery-saver', 'battery-fps', 'idle-dim-minutes'
 // What decides whether the desktop counts as hidden, and what then stops.
 const HIDDEN_KEYS = ['animation', 'pause-coverage', 'see-through-apps'];
 const MUSIC_KEYS = ['music-mode', 'music-button', 'music-source', 'music-folder', 'music-volume'];
+const SCREENSAVER_KEYS = ['screensaver', 'screensaver-minutes', 'screensaver-on-battery'];
 const HOLD_SECONDS = 20;          // pause on "today" before the replay starts over
 const EVENT_CARD_SECONDS = 8;
 const TRAIL_HZ = 4;
@@ -56,6 +58,7 @@ const FOCUS_MS = 750;
 const SUN_LEVELS = [10000, 3000, 1361, 300, 100, 30, 10, 3, 1];
 const IDLE_FPS = 10;
 const STILL_FPS = 5;
+const SCREENSAVER_FPS = 30;
 const TOUR_KEYS = ['tour', 'tour-mission', 'tour-idle-minutes'];
 
 const smooth = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
@@ -2907,6 +2910,8 @@ export default class OrreryExtension extends Extension {
                 this._syncAnimation();
             else if (MUSIC_KEYS.includes(key))
                 this._syncMusic();
+            else if (SCREENSAVER_KEYS.includes(key))
+                this._recheck();
             else if (key === 'show-in-overview')
                 this._syncMirror();
             else if (key === 'sunlight-auto')
@@ -2926,6 +2931,7 @@ export default class OrreryExtension extends Extension {
         this._mirror = new SceneMirror(index => this._actorOn(index));
         this._syncMirror();
         Main.overview.connectObject('showing', () => this._recheck(), 'hidden', () => this._recheck(), this);
+        this._screensaver = new Screensaver(index => this._actorOn(index), () => this._recheck());
 
         this._music = new Music({
             onError: message => {
@@ -2955,6 +2961,8 @@ export default class OrreryExtension extends Extension {
         if (this._recheckId)
             GLib.source_remove(this._recheckId);
         this._timer = this._relayoutId = this._raiseId = this._recheckId = 0;
+        this._screensaver?.destroy();
+        this._screensaver = null;
 
         if (this._scene && this._settings.get_string('mode') === 'replay')
             this._settings.set_double('replay-jd', Math.min(this._scene.jd, Astro.jdNow()));
@@ -3169,6 +3177,8 @@ export default class OrreryExtension extends Extension {
             fps = Math.min(fps, s.get_int('battery-fps'));
         if (this._idle)
             fps = Math.min(fps, IDLE_FPS);
+        if (this._screensaver?.active)
+            fps = Math.min(fps, SCREENSAVER_FPS);
         if (s.get_boolean('adaptive-fps') && this._scenes.every(scene => scene.still))
             fps = Math.min(fps, STILL_FPS);
         return fps;
@@ -3255,10 +3265,17 @@ export default class OrreryExtension extends Extension {
         // Paused, it still moves while someone uses it; nobody sees it
         // behind the lock screen whatever the mode.
         const mode = s.get_string('animation');
-        const paused = this._locked || (mode !== 'continuous' && hidden) ||
-            (mode === 'paused' && !this._scenes.some(scene => scene.interacting));
+        const idleMs = global.backend.get_core_idle_monitor().get_idletime();
+        this._screensaver?.sync(s.get_boolean('screensaver') && !this._locked &&
+            (s.get_boolean('screensaver-on-battery') || !this._power?.onBattery) &&
+            idleMs >= s.get_int('screensaver-minutes') * 60000);
+        // The screensaver shows the scene whatever covers the desktop, at
+        // full brightness.
+        const saver = !!this._screensaver?.active;
+        const paused = this._locked || (!saver && ((mode !== 'continuous' && hidden) ||
+            (mode === 'paused' && !this._scenes.some(scene => scene.interacting))));
         const minutes = s.get_int('idle-dim-minutes');
-        const idle = minutes > 0 && global.backend.get_core_idle_monitor().get_idletime() > minutes * 60000;
+        const idle = !saver && minutes > 0 && idleMs > minutes * 60000;
         if (idle !== this._idle) {
             this._idle = idle;
             this._scenes.forEach(scene => scene.setDim(idle ? s.get_double('idle-brightness') / 100 : 1));

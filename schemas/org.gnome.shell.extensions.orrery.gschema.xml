@@ -210,6 +210,18 @@
       <range min="5" max="100"/><default>40</default>
       <summary>Brightness while dimmed, percent of normal</summary>
     </key>
+    <key name="screensaver" type="b">
+      <default>false</default>
+      <summary>Show the solar system fullscreen, over the windows, when the computer sits idle</summary>
+    </key>
+    <key name="screensaver-minutes" type="i">
+      <range min="1" max="60"/><default>5</default>
+      <summary>Minutes without input before the screensaver starts</summary>
+    </key>
+    <key name="screensaver-on-battery" type="b">
+      <default>false</default>
+      <summary>Run the screensaver on battery too</summary>
+    </key>
     <key name="pixel-shift" type="b">
       <default>true</default>
       <summary>Drift the whole scene a few pixels over time to spread OLED wear</summary>

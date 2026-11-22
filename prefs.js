@@ -249,6 +249,11 @@ export default class OrreryPreferences extends ExtensionPreferences {
             this._spin('Dim after', 'idle-dim-minutes', 0, 60, 1, 'Minutes without keyboard or mouse input; 0 never dims'),
             idleBrightness,
         ], 'Dimming also drops the frame rate to 10. Moving the pointer brings everything back at once.'));
+        page.add(this._group('Screensaver', [
+            this._switch('Screensaver', 'screensaver', 'The solar system fullscreen over your windows when the computer sits idle'),
+            this._dependsOn(this._spin('Starts after', 'screensaver-minutes', 1, 60, 1, 'Minutes without keyboard or mouse input'), 'screensaver'),
+            this._dependsOn(this._switch('Run on battery', 'screensaver-on-battery'), 'screensaver'),
+        ], 'Any key or mouse movement ends it. It waits while a video, Caffeine or a fullscreen app keeps the screen on. Locking and sleep still follow GNOME’s own settings.'));
         page.add(this._group('OLED care', [
             this._switch('Pixel shift', 'pixel-shift', 'Drift the whole scene by a few pixels over time to spread OLED wear'),
         ]));
