@@ -26,4 +26,5 @@ pkgs=()
 "$CONTAINER" run --rm "${gpu[@]}" "${pkgs[@]}" -v "$root":/src:ro,z -v "$here/tester":/tester:ro,z -v "$out":/out:z \
     -v "$here/run-in-container.sh":/run.sh:ro,z "$image" /run.sh 2>/dev/null | grep -E "ORRERY-TEST|JS ERROR|Extension orrery|Orrery:" -A3
 echo "Log and screenshots: $out"
-grep -q "ORRERY-TEST re-enabled state 1" "$out/log.txt" && ! grep -q "JS ERROR" "$out/log.txt"
+grep -q "ORRERY-TEST re-enabled state 1" "$out/log.txt" && ! grep -q "JS ERROR" "$out/log.txt" &&
+    ! grep -m3 "CRITICAL.*orrery" "$out/log.txt"

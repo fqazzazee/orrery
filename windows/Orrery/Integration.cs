@@ -37,7 +37,12 @@ public static class Integration
     {
         try
         {
-            return Mutex.TryOpenExisting(Wallpaper.MutexName, out var m) && m != null;
+            // Close the handle at once: while it is open the mutex outlives
+            // the wallpaper process, and a new one would think it is running.
+            if (!Mutex.TryOpenExisting(Wallpaper.MutexName, out var m))
+                return false;
+            m.Dispose();
+            return true;
         }
         catch
         {

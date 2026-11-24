@@ -24,6 +24,15 @@ DATE=$(LC_ALL=C date -u '+%a %b %d %Y')
 mkdir -p "$DIST"
 cd "$ROOT"
 
+# Packages of other versions left in dist/ would be summed and published with
+# these, and the shell test would install them alongside.
+for f in "$DIST"/*.rpm "$DIST"/*.deb "$DIST"/*.pkg.tar.zst "$DIST"/orrery-*.tar.gz; do
+    case $f in
+    *[-_]"$VERSION"-1[-._]* | "$DIST/orrery-$VERSION.tar.gz") ;;
+    *) rm -f "$f" ;;
+    esac
+done
+
 fill() {  # copy a template, filling in the version and date
     sed -e "s/@VERSION@/$VERSION/g" -e "s/@DATE@/$DATE/g" "$1" > "$2"
 }
@@ -33,9 +42,12 @@ run() {  # run a shell script in a container image, with dist/ mounted at /dist
     "$CONTAINER" run --rm -v "$DIST":/dist:z "$image" bash -euo pipefail -c "$script"
 }
 
-# The source: every tracked file, as it is in the working tree.
+# The source: every tracked file, as it is in the working tree. Untracked
+# files stay out, and so do tracked ones deleted here (tar would fail on them).
 echo "== source orrery-$VERSION.tar.gz"
-git ls-files -z --cached --others --exclude-standard | tar --null -T - --transform "s,^,orrery-$VERSION/," -czf "$DIST/orrery-$VERSION.tar.gz"
+git ls-files -z --cached | while IFS= read -r -d '' f; do
+    if [ -e "$f" ] || [ -L "$f" ]; then printf '%s\0' "$f"; fi
+done | tar --null -T - --transform "s,^,orrery-$VERSION/," -czf "$DIST/orrery-$VERSION.tar.gz"
 
 for target in $TARGETS; do
     case $target in

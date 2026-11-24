@@ -11,7 +11,7 @@ import {buildTrajectories} from '../lib/missions.js';
 import {sunlightColor} from '../lib/render.js';
 import {SCREENSAVER_CONTENT, ScreensaverSettings, migrateSettings} from '../lib/settings.js';
 import {GM} from '../lib/bodies.js';
-import {SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
+import {MISSION_ORBITS, SAT, SATELLITES, orbitOf} from '../lib/satellites.js';
 import {TOUR_PLANETS, planSpan, planetTour, storyPlan} from '../lib/tour.js';
 
 let failed = 0;
@@ -75,6 +75,26 @@ for (const tr of buildTrajectories().filter(x => !x.lunar)) {
     check(worst < 2e-3, `${tr.mission.name} meets every flyby target (worst ${worst.toExponential(1)} AU)`);
     check(tr.segments.every(s => s.kind !== 'fly' || s.hop || Math.abs(s.orbit.e - 1) > 1e-3), `${tr.mission.name} has no degenerate legs`);
 }
+// Every craft is somewhere at every moment from launch to its last event,
+// and never moves faster than 0.03 AU in 6 hours (208 km/s; Parker, the
+// fastest, peaks near 192 km/s).
+{
+    let bad = [];
+    for (const tr of buildTrajectories().filter(x => !x.lunar)) {
+        let last = null, worst = 0, missing = 0;
+        for (let t = tr.launch; t < Math.min(tr.end, tr.events.at(-1).t); t += 0.25) {
+            const p = tr.position(t);
+            if (!p)
+                missing++;
+            else if (last)
+                worst = Math.max(worst, Astro.norm(Astro.sub(p, last)));
+            last = p;
+        }
+        if (missing || worst > 0.03)
+            bad.push(`${tr.mission.id} (${missing / 4} days missing, worst step ${worst.toFixed(3)} AU)`);
+    }
+    check(!bad.length, `every craft has a place all along its flight${bad.length ? `: ${bad.join('; ')}` : ''}`);
+}
 // Moon missions: at the Moon for each lunar event, home for splashdown,
 // and the Moon itself where it really was.
 for (const tr of buildTrajectories().filter(x => x.lunar)) {
@@ -86,6 +106,25 @@ for (const tr of buildTrajectories().filter(x => x.lunar)) {
     const home = tr.events.find(e => e.kind === 'end' && e.at === 'earth');
     const landed = home ? Astro.norm(tr.geo(home.t - 1e-4)) : 0;
     check(worst < 25000 && landed < 7000, `${tr.mission.name} meets the Moon (worst ${(worst / 1000).toFixed(1)}k km) and gets home`);
+}
+// Moon missions on screen: no jump where one leg hands over to the next,
+// at the Moon or at Earth (the Moon's sprite drawn 20 px across, space 1 px
+// per 1,000 km).
+{
+    const R = 20, place = v => Astro.scale(v, 1 / 1000);
+    const at = (tr, t) => tr.screen(t, {place, moon: place(Astro.moonPosition(t)), R, view: v => v});
+    let jumps = [];
+    for (const tr of buildTrajectories().filter(x => x.lunar)) {
+        for (const [i, s] of tr.segments.entries()) {
+            if (!i || s.t0 >= tr.end)
+                continue;
+            const [a, b] = [at(tr, s.t0 - 1e-5), at(tr, s.t0 + 1e-5)];
+            const d = a && b ? Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) : Infinity;
+            if (d > 0.05 * R)
+                jumps.push(`${tr.mission.id} ${s.phase} ${Astro.formatDate(s.t0)} (${(d / R).toFixed(2)} R)`);
+        }
+    }
+    check(!jumps.length, `Moon missions hand over between legs without a jump${jumps.length ? `: ${jumps.join('; ')}` : ''}`);
 }
 check(near(Astro.moonPhase(Astro.jd('2024-04-08 18:17')).age, 0, 0.01) || near(Astro.moonPhase(Astro.jd('2024-04-08 18:17')).age, 1, 0.01),
     'new moon at the eclipse of 8 April 2024');
@@ -108,6 +147,9 @@ check(proj.project([0, 1, 0])[1] < 100, 'top-down: +y is up the screen');
 
 check(Astro.formatDuration(500) === '8 min 20 s', 'formatDuration minutes');
 check(Astro.formatDuration(4.1 * 3600) === '4 h 6 min', 'formatDuration hours');
+// 119.6 s rounds to 120 s, 3599.7 s to 3600 s, 7199 s (119.98 min) to 120 min.
+check(Astro.formatDuration(119.6) === '2 min' && Astro.formatDuration(3599.7) === '1 h' && Astro.formatDuration(7199) === '2 h',
+    `formatDuration carries a rounded-up 60 (${Astro.formatDuration(119.6)}, ${Astro.formatDuration(3599.7)}, ${Astro.formatDuration(7199)})`);
 
 // Sunlight: inverse square, and the view's flattening of the ecliptic.
 check(Astro.irradiance(1) === Astro.SOLAR_CONSTANT, 'irradiance at 1 AU is the solar constant');
@@ -183,6 +225,11 @@ check(near(Astro.inclinationDeg(Astro.planetOrbit('mercury', Astro.J2000)), 7.0,
     check(near(Astro.norm(Astro.sub(Astro.bodyPosition('l2', t), e)) * Astro.AU_KM, 1.5e6, 2e4), 'L2 is 1.5 million km beyond Earth');
     const opp = Astro.nextAlignment('mars', Astro.jd('2026-10-01'));
     check(opp && Math.abs(opp - Astro.jd('2027-02-19')) < 3, `Mars opposition on 19 Feb 2027 (${opp && Astro.formatDate(opp)})`);
+    // Inner planets: only inferior conjunction counts, not passing behind the Sun.
+    const venus = Astro.nextAlignment('venus', Astro.jd('2026-11-24'));
+    check(venus && Math.abs(venus - Astro.jd('2028-06-01')) < 2, `Venus next between us and the Sun on 1 Jun 2028 (${venus && Astro.formatDate(venus)})`);
+    const mercury = Astro.nextAlignment('mercury', Astro.jd('2019-08-01'));
+    check(mercury && Math.abs(mercury - Astro.jd('2019-11-11 15:20')) < 1, `Mercury next between us and the Sun at its transit, 11 Nov 2019 (${mercury && Astro.formatDate(mercury)})`);
     check(Astro.moonPhase(Astro.jd('2024-01-25') + 0.25).lit > 0.98 && Astro.moonPhase(Astro.jd('2024-02-09') + 0.5).lit < 0.03, 'Moon phase: full on 25 Jan 2024, new on 9 Feb');
     const ap = Astro.norm(Astro.sub(Astro.bodyPosition('apophis', Astro.jd('2029-04-13') + 0.4), Astro.planetPosition('earth', Astro.jd('2029-04-13') + 0.4)));
     check(ap < 0.005, `Apophis passes close to Earth on 13 Apr 2029 (${ap.toFixed(4)} AU)`);
@@ -203,6 +250,19 @@ check(near(Astro.inclinationDeg(Astro.planetOrbit('mercury', Astro.J2000)), 7.0,
     const o = {...orbitOf({alt: 420, i: 51.6}, 'earth')};
     const r = Astro.norm(Astro.satellitePosition(o, [0, 0, 1], GM.earth, Astro.J2000 + 1.234));
     check(near(r, 6371 + 420, 1), 'a circular orbit stays at its height');
+    // Juno (e 0.975): over the last tenth of a lap, falling toward perijove,
+    // it only gets nearer, down to Jupiter's radius plus 4,200 km.
+    {
+        const juno = orbitOf(MISSION_ORBITS.juno, 'jupiter');
+        const lap = Astro.satellitePeriodS(juno.a, GM.jupiter) / 86400, q = 69911 + 4200;
+        let last = Infinity, falling = true;
+        for (let k = 2000; k >= 0; k--) {
+            const d = Astro.norm(Astro.satellitePosition(juno, [0, 0, 1], GM.jupiter, Astro.J2000 + lap * (1 - 0.1 * k / 2000)));
+            falling &&= d < last && d > q - 1;
+            last = d;
+        }
+        check(falling && near(last, q, 1), `Juno closes in on perijove without jumping (ends at ${last.toFixed(0)} km)`);
+    }
     let bad = [];
     for (const id of Object.keys(SAT)) {
         const text = JSON.stringify(details(id, Astro.jd('2026-10-23')));

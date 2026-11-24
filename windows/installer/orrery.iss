@@ -117,7 +117,9 @@ begin
     Result := GetShortName(Result);
 end;
 
-// Stops the app, the wallpaper and the screensaver, if they run from {app}.
+// Stops the app, the wallpaper and the screensaver (Orrery.scr, also its
+// preview), if they run from {app}. The wallpaper is first asked to quit, so
+// it puts the static wallpaper back; whatever is left is then killed.
 procedure StopOrrery;
 var
   Code: Integer;
@@ -126,9 +128,14 @@ begin
   Folder := ExpandConstant('{app}');
   StringChangeEx(Folder, '''', '''''', True);
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -Command "Get-Process Orrery -ErrorAction SilentlyContinue | ' +
-    'Where-Object { $_.Path -and $_.Path.StartsWith(''' + Folder + '\'', [StringComparison]::OrdinalIgnoreCase) } | ' +
-    'Stop-Process -Force -ErrorAction SilentlyContinue"',
+    '-NoProfile -NonInteractive -Command "' +
+    '$p = @(Get-Process -Name Orrery, Orrery.scr -ErrorAction SilentlyContinue | ' +
+    'Where-Object { $_.Path -and $_.Path.StartsWith(''' + Folder + '\'', [StringComparison]::OrdinalIgnoreCase) }); ' +
+    '$w = @($p | Where-Object { (Get-CimInstance Win32_Process -Filter (''ProcessId='' + $_.Id) -ErrorAction SilentlyContinue).CommandLine -like ''*--wallpaper*'' }); ' +
+    'if ($w.Count) { ' +
+    'try { $e = [Threading.EventWaitHandle]::OpenExisting(''Local\Orrery.Wallpaper.Quit''); [void]$e.Set(); $e.Dispose() } catch {}; ' +
+    '$w | Wait-Process -Timeout 3 -ErrorAction SilentlyContinue }; ' +
+    '$p | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue"',
     '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 
@@ -179,6 +186,11 @@ begin
   if CurUninstallStep <> usUninstall then
     Exit;
   StopOrrery;
+  // The tray's "Start with Windows" writes Run\Orrery without the task:
+  // remove it too, if it starts this copy.
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Orrery', Current) and
+     (Pos(Lowercase(ExpandConstant('{app}\Orrery.exe')), Lowercase(Current)) > 0) then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Orrery');
   // Clear the screensaver only if it is ours.
   if RegQueryStringValue(HKCU, 'Control Panel\Desktop', 'SCRNSAVE.EXE', Current) then
   begin

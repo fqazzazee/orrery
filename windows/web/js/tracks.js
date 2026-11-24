@@ -60,7 +60,15 @@ export class FolderMusic {
         this._wanted = false;
         if (Host.onAndroid)
             this._tell();
-        else
+        else if (document.hidden) {
+            // A hidden page gets no animation frames to fade with: stop now.
+            cancelAnimationFrame(this._fade);
+            this._level = 0;
+            if (this._audio) {
+                this._audio.volume = 0;
+                this._audio.pause();
+            }
+        } else
             this._fadeTo(0, FADE_OUT, () => this._audio?.pause());
     }
 
@@ -90,6 +98,7 @@ export class FolderMusic {
             URL.revokeObjectURL(f.url);
         this._files = [...files].filter(f => AUDIO.test(f.name)).map(f => ({name: f.name, url: URL.createObjectURL(f)}));
         this._order = [];
+        this._failures = 0;
         this._audio?.removeAttribute('src');
         if (wasPlaying) {
             this._wanted = false;
@@ -118,13 +127,15 @@ export class FolderMusic {
             this._audio.volume = 0;
             this._audio.addEventListener('ended', () => this._next());
             this._audio.addEventListener('error', () => this._skip());
+            this._audio.addEventListener('playing', () => { this._failures = 0; });
         }
         this._audio.src = this._files[this._order.pop()].url;
         if (this._wanted)
             this._audio.play().catch(() => {});
     }
 
-    // A file that will not play: on to the next, unless none will.
+    // A file that will not play: on to the next, unless none will (as many
+    // failures in a row as there are files).
     _skip() {
         this._failures = (this._failures ?? 0) + 1;
         if (this._failures < this._files.length)

@@ -3,9 +3,22 @@
 # and the tester extension, which drives it and logs what happens. Two
 # monitors of different shapes, so the second one gets a scene too.
 set -u
+SYSTEM_EXT=/usr/share/gnome-shell/extensions/orrery@fqazzazee.github.io
 if [ -n "${INSTALL:-}" ]; then
-    if command -v dnf >/dev/null; then dnf -y -q install /dist/*.noarch.rpm >/dev/null 2>&1
-    else apt-get update -qq >/dev/null 2>&1; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /dist/*_all.deb >/dev/null 2>&1; fi
+    # Only this version's extension package: dist/ may hold others too. A
+    # failed install must fail the test, not quietly test /src instead.
+    version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version-name"])' /src/metadata.json)
+    if command -v dnf >/dev/null; then
+        dnf -y -q install "/dist/gnome-shell-extension-orrery-$version-1.noarch.rpm" >/tmp/install.log 2>&1
+    else
+        apt-get update -qq >/dev/null 2>&1
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "/dist/gnome-shell-extension-orrery_${version}-1_all.deb" >/tmp/install.log 2>&1
+    fi
+    if [ $? -ne 0 ] || [ ! -d $SYSTEM_EXT ]; then
+        echo "Orrery: installing the $version package failed:"
+        tail -20 /tmp/install.log
+        exit 1
+    fi
 fi
 step() { echo "$(date +%T) $*" >> /tmp/progress; }
 step start
@@ -32,7 +45,7 @@ step buses
 export XDG_RUNTIME_DIR=/tmp/run XDG_DATA_HOME=/tmp/data XDG_CONFIG_HOME=/tmp/config
 mkdir -p $XDG_RUNTIME_DIR $XDG_DATA_HOME/gnome-shell/extensions && chmod 700 $XDG_RUNTIME_DIR
 # From the installed package if there is one, else from the source tree.
-if [ -d /usr/share/gnome-shell/extensions/orrery@fqazzazee.github.io ]; then
+if [ -d $SYSTEM_EXT ]; then
     step "using the installed package"
 else
     cp -r /src $XDG_DATA_HOME/gnome-shell/extensions/orrery@fqazzazee.github.io

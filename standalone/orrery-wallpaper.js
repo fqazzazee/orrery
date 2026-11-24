@@ -9,6 +9,7 @@
 // --no-hud --no-labels --no-trails --no-moons --zoom PERCENT
 
 import Cairo from 'cairo';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import System from 'system';
 
@@ -73,13 +74,17 @@ function parse(argv) {
 
 async function screenSize() {
     try {
+        // GDK has no display until GTK is initialised. init_check, unlike
+        // init, just returns false when there is no screen (cron, ssh).
+        const Gtk = (await import('gi://Gtk?version=4.0')).default;
         const Gdk = (await import('gi://Gdk?version=4.0')).default;
-        const display = Gdk.Display.get_default();
+        const display = Gtk.init_check() ? Gdk.Display.get_default() : null;
         const monitors = display?.get_monitors();
         if (monitors?.get_n_items()) {
             const m = monitors.get_item(0);
-            const g = m.get_geometry(), scale = m.get_scale_factor();
-            return [g.width * scale, g.height * scale];
+            // get_scale (GTK 4.14) is the fractional one, e.g. 1.5.
+            const g = m.get_geometry(), scale = m.get_scale?.() ?? m.get_scale_factor();
+            return [Math.round(g.width * scale), Math.round(g.height * scale)];
         }
     } catch {
         // No display: fall back.
@@ -109,12 +114,33 @@ export function renderFile(file, [W, H], jd, opts, trajectories) {
     surface.writeToPNG(file);
 }
 
-function cacheFile() {
+// Draw into the cache and return the file. Two names in turn, as some
+// desktops only reload when the path changes: the older of the two (by what
+// is on disk, so one-shot `apply` runs alternate too) is replaced, never the
+// one on screen. It is drawn under a temporary name and renamed into place,
+// so nothing ever reads half a picture.
+function renderCached(size, jd, opts, trajectories) {
     const dir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'orrery']);
     GLib.mkdir_with_parents(dir, 0o755);
-    // Two names in turn: some desktops only reload when the path changes.
-    const n = Math.floor(Date.now() / 1000) % 2;
-    return GLib.build_filenamev([dir, `wallpaper-${n}.png`]);
+    const age = name => {
+        try {
+            const info = Gio.File.new_for_path(name).query_info('time::modified,time::modified-usec', Gio.FileQueryInfoFlags.NONE, null);
+            return info.get_attribute_uint64('time::modified') * 1e6 + info.get_attribute_uint32('time::modified-usec');
+        } catch {
+            return -1;      // missing: use it first
+        }
+    };
+    const [a, b] = [0, 1].map(n => GLib.build_filenamev([dir, `wallpaper-${n}.png`]));
+    const file = age(a) <= age(b) ? a : b;
+    const tmp = `${file}.tmp`;
+    try {
+        renderFile(tmp, size, jd, opts, trajectories);
+        if (GLib.rename(tmp, file) !== 0)
+            throw new Error(`cannot write ${file}`);
+    } finally {
+        GLib.unlink(tmp);   // only left over if something failed
+    }
+    return file;
 }
 
 async function main(argv) {
@@ -132,8 +158,7 @@ async function main(argv) {
         return 0;
     }
     case 'apply': {
-        const file = cacheFile();
-        renderFile(file, opts.size ?? await screenSize(), jdOf(opts), opts, trajectories);
+        const file = renderCached(opts.size ?? await screenSize(), jdOf(opts), opts, trajectories);
         return applyWallpaper(file) ? 0 : 1;
     }
     case 'daemon': {
@@ -142,10 +167,8 @@ async function main(argv) {
         print(`orrery-wallpaper: ${detectDesktop()} desktop, redrawing every ${every} min`);
         const loop = new GLib.MainLoop(null, false);
         const tick = () => {
-            const file = cacheFile();
             try {
-                renderFile(file, size, Astro.jdNow(), opts, trajectories);
-                applyWallpaper(file);
+                applyWallpaper(renderCached(size, Astro.jdNow(), opts, trajectories));
             } catch (e) {
                 printerr(`orrery-wallpaper: ${e.message}`);
             }
@@ -158,7 +181,8 @@ async function main(argv) {
     }
     case 'live': {
         const {runLive} = await import('./live.js');
-        return runLive(opts, trajectories, sceneOptions(opts));
+        // Same start as render: a date alone is noon UTC.
+        return runLive(opts, trajectories, sceneOptions(opts), jdOf(opts));
     }
     default:
         printerr(USAGE);

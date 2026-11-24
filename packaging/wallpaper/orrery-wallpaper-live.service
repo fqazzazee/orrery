@@ -8,6 +8,8 @@ After=graphical-session.target
 ExecStart=@BIN@ live
 Restart=on-failure
 RestartSec=10
+# 3: this desktop has no layer-shell (GNOME, X11). Trying again will not help.
+RestartPreventExitStatus=3
 
 [Install]
 WantedBy=graphical-session.target

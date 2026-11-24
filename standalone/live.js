@@ -24,11 +24,16 @@ const FPS = 24;
 const SPIN_DAY = 12;            // real seconds for one turn of the Earth
 const SLOW_SECONDS = 2;         // how often the cached layers are redrawn
 
-export function runLive(opts, trajectories, sceneOpts) {
+// Exit code when this desktop cannot show it, so the systemd unit does not
+// keep restarting (RestartPreventExitStatus in orrery-wallpaper-live.service).
+const UNSUPPORTED = 3;
+
+// `start` is the Julian date to begin at: --date, else now.
+export function runLive(opts, trajectories, sceneOpts, start) {
     if (!LayerShell || !LayerShell.is_supported()) {
         printerr('orrery-wallpaper: live mode needs a Wayland compositor with layer-shell (Sway, Hyprland, niri, labwc, river, ' +
             'Wayfire, COSMIC, KDE Plasma) and gtk4-layer-shell. Use "orrery-wallpaper daemon" elsewhere.');
-        return 1;
+        return UNSUPPORTED;
     }
     const app = new Gtk.Application({application_id: 'io.github.fqazzazee.OrreryWallpaper'});
     app.connect('activate', () => {
@@ -45,10 +50,10 @@ export function runLive(opts, trajectories, sceneOpts) {
         win.set_child(area);
 
         const speed = opts.speed ?? 0;           // days per second; 0 is real time
-        const start = opts.date ? Astro.jdFromMs(Date.parse(opts.date)) : Astro.jdNow();
         const t0 = GLib.get_monotonic_time();
         const now = () => (GLib.get_monotonic_time() - t0) / 1e6;
-        const jdAt = s => speed ? start + s * speed : Astro.jdNow();
+        // With --date and no speed, the sky stays on that date.
+        const jdAt = s => speed || opts.date ? start + s * speed : Astro.jdNow();
 
         let cache = null;   // {w, h, view, backdrop, trails, at}
         let hud = null;     // {surface, at}
@@ -73,7 +78,8 @@ export function runLive(opts, trajectories, sceneOpts) {
         const redrawHud = s => {
             hud = {at: s, surface: layer(cache.w, cache.h, cr => drawHud(cr, cache.view, jdAt(s), trajectories, {
                 ...sceneOpts, fact: !speed && sceneOpts.fact,
-                caption: speed ? `Replaying · ${speed} days per second` : 'Live · the solar system right now',
+                caption: speed ? `Replaying · ${speed} days per second`
+                    : opts.date ? `Showing ${Astro.formatDate(start)}` : 'Live · the solar system right now',
             }))};
         };
 

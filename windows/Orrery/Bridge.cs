@@ -35,7 +35,17 @@ public class Bridge
 
     public string settings() => SettingsStore.Shared.AllJson();
 
-    public void save(string key, string json) => SettingsStore.Shared.Save(key, json);
+    public void save(string key, string json)
+    {
+        try
+        {
+            SettingsStore.Shared.Save(key, json);
+        }
+        catch (Exception e)
+        {
+            Log.Write($"bridge: save {key}: {e}");
+        }
+    }
 
     public string surface() => surfaceName;
 

@@ -26,20 +26,56 @@ function output(argv) {
     }
 }
 
+const readText = file => {
+    try {
+        return new TextDecoder().decode(GLib.file_get_contents(file)[1]).trim();
+    } catch {
+        return '';
+    }
+};
+
 // A long-running wallpaper program (swaybg): start a new one, then stop the
-// one before, so the screen is never bare.
-let background = null;
+// one before, so the screen is never bare. The old pid is kept in a file, as
+// one-shot `apply` runs are separate processes; it waits here rather than on
+// a timeout, because `apply` exits without running a main loop.
 function respawn(argv) {
+    const dir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'orrery']);
+    GLib.mkdir_with_parents(dir, 0o755);
+    const pidFile = GLib.build_filenamev([dir, `${argv[0]}.pid`]);
+    const old = readText(pidFile);
     const [, pid] = GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD, null);
     GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, () => GLib.spawn_close_pid(pid));
-    const old = background;
-    background = pid;
-    if (old)
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-            sh(['kill', String(old)]);
-            return GLib.SOURCE_REMOVE;
-        });
+    GLib.file_set_contents(pidFile, String(pid));
+    // Only if that pid is still one of ours, not a reused number.
+    if (/^\d+$/.test(old) && readText(`/proc/${old}/comm`) === argv[0]) {
+        GLib.usleep(1500 * 1000);
+        sh(['kill', old]);
+    }
     return true;
+}
+
+// COSMIC's background service reads its own config, not GSettings, and
+// reloads when the file changes.
+function setCosmic(file) {
+    const dir = GLib.build_filenamev([GLib.get_user_config_dir(), 'cosmic', 'com.system76.CosmicBackground', 'v1']);
+    GLib.mkdir_with_parents(dir, 0o755);
+    const entry = `(
+    output: "all",
+    source: Path(${JSON.stringify(file)}),
+    filter_by_theme: false,
+    rotation_frequency: 300,
+    filter_method: Lanczos,
+    scaling_mode: Zoom,
+    sampling_method: Alphanumeric,
+)`;
+    try {
+        GLib.file_set_contents(GLib.build_filenamev([dir, 'same-on-all']), 'true');
+        GLib.file_set_contents(GLib.build_filenamev([dir, 'all']), entry);
+        return true;
+    } catch (e) {
+        printerr(`orrery-wallpaper: cannot write COSMIC's background settings: ${e.message}`);
+        return false;
+    }
 }
 
 export function detectDesktop() {
@@ -87,11 +123,12 @@ export function applyWallpaper(file) {
                 sh(['hyprctl', 'hyprpaper', 'unload', 'unused']);
         }
         break;
+    case 'cosmic':
+        return setCosmic(file);
     case 'budgie':
     case 'gnome':
     case 'pantheon':
     case 'unity':
-    case 'cosmic':
         // (On GNOME the extension is the better way; this is a fallback.)
         if (has('gsettings'))
             return sh(['gsettings', 'set', 'org.gnome.desktop.background', 'picture-uri', uri(file)]) &&

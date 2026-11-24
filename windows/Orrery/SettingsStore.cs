@@ -67,7 +67,7 @@ public sealed class SettingsStore : IDisposable
                     return new JsonObject();
                 return JsonNode.Parse(File.ReadAllText(FilePath)) as JsonObject ?? new JsonObject();
             }
-            catch (IOException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 Thread.Sleep(30);   // another process is writing it
             }
@@ -108,14 +108,24 @@ public sealed class SettingsStore : IDisposable
         var text = values.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         lastWritten = text;
         var temp = FilePath + ".tmp";
-        try
+        // Replacing the file fails while another process reads it: try again.
+        for (int attempt = 0; ; attempt++)
         {
-            File.WriteAllText(temp, text);
-            File.Move(temp, FilePath, overwrite: true);
-        }
-        catch (IOException e)
-        {
-            Log.Write($"settings: not saved: {e.Message}");
+            try
+            {
+                File.WriteAllText(temp, text);
+                File.Move(temp, FilePath, overwrite: true);
+                return;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                if (attempt == 2)
+                {
+                    Log.Write($"settings: not saved: {e.Message}");
+                    return;
+                }
+                Thread.Sleep(30);
+            }
         }
     }
 
@@ -126,7 +136,7 @@ public sealed class SettingsStore : IDisposable
         {
             text = File.Exists(FilePath) ? File.ReadAllText(FilePath) : "{}";
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return;     // mid-write: the next event brings it
         }

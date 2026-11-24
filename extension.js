@@ -207,6 +207,7 @@ class OrreryScene {
         this._zoomTarget = 0;
         this._farMul = 1;             // the far view's speed, times its own pace
         this._focus = null;           // PlanetView of a planet up close
+        this._leaving = null;         // the close-up still flying out
         this._focusMul = 1;
         // Days the moons (and satellites, up close) have run on while the
         // date was paused; they keep turning as long as the spin is on.
@@ -283,6 +284,8 @@ class OrreryScene {
         this._markerLayer.destroy();
         this._craftLayer.destroy();
         this._labels.destroy();
+        this._leaving?.destroy();
+        this._leaving = null;
         this._focusLayer.destroy();
         this._system.destroy();
         this._content.destroy();
@@ -987,6 +990,9 @@ class OrreryScene {
         this._playing = true;
         const [cx, cy] = [this._focus.cx, this._focus.cy];
         const mode = Clutter.AnimationMode.EASE_IN_OUT_CUBIC;
+        // Stopping a fly-out skips its onComplete, so drop the old close-up here.
+        this._leaving?.destroy();
+        this._leaving = null;
         for (const a of [this._system, this._focusLayer])
             a.remove_all_transitions();
         this._system.show();
@@ -1025,6 +1031,9 @@ class OrreryScene {
         const b = this._bodyById(leaving.id);
         const [px, py] = [b?.x ?? this._W / 2, b?.y ?? this._H / 2];
         const mode = Clutter.AnimationMode.EASE_IN_OUT_CUBIC;
+        // Kept until it has flown out, so a new close-up can drop it early.
+        this._leaving?.destroy();
+        this._leaving = leaving;
         for (const a of [this._system, this._focusLayer])
             a.remove_all_transitions();
         this._system.show();
@@ -1032,7 +1041,13 @@ class OrreryScene {
         this._system.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: animate ? FOCUS_MS : 0, mode});
         this._focusLayer.ease({scale_x: 0.12, scale_y: 0.12, translation_x: px - leaving.cx, translation_y: py - leaving.cy,
             opacity: 0, duration: animate ? FOCUS_MS : 0, mode,
-            onComplete: () => leaving.destroy()});
+            onComplete: () => {
+                // (Unless something else has dropped it already.)
+                if (this._leaving !== leaving)
+                    return;
+                this._leaving = null;
+                leaving.destroy();
+            }});
         if (this._live())
             this._goNow();
         this._setHover(null);
@@ -1389,6 +1404,9 @@ class OrreryScene {
         this._margin = m;
         this._cardWidth = Math.round(Math.min(380, Math.max(260, this._W * 0.19)));
         this._missionBox.visible = show && s.get_boolean('show-missions');
+        // Rows outlive a relayout, so they follow 'interactive' here.
+        for (const row of this._missionRows.values())
+            row.box.reactive = s.get_boolean('interactive');
 
         // Timeline: centered between the mission list and the cards, or in
         // a corner, at the top or bottom. Whatever shares its corner moves
@@ -2819,13 +2837,18 @@ class OrreryScene {
                 tr.marker?.destroy();
                 tr.label?.destroy();
                 tr.edge?.destroy();
+                // So anything still holding the old craft finds no marker.
+                tr.marker = tr.label = tr.edge = null;
             }
             if (this._selected?.tr)
                 this._deselect();
-            // Cards, hover and hit areas still point at the old craft.
+            // Cards, hover, hit areas and mission rows still point at the old craft.
             for (const c of this._eventCards)
                 c.card.dismiss();
             this._eventCards = [];
+            for (const row of this._missionRows.values())
+                row.box.destroy();
+            this._missionRows.clear();
             if (this._factSubject?.tr) {
                 this._factCard?.dismiss();
                 this._factCard = null;
@@ -2835,6 +2858,13 @@ class OrreryScene {
                 this._setHover(null);
             this._trailHits = [];
             this._buildTrajectories();
+            // A story's picks move to the new craft of the same mission.
+            for (const step of this._tour?.steps ?? []) {
+                if (step.pick?.tr) {
+                    const tr = this._trajectories.find(x => x.mission.id === step.pick.tr.mission.id);
+                    step.pick = tr ? {tr} : null;
+                }
+            }
             this._buildCraft();
             this._timelineRange();
             this._updateAll(0);

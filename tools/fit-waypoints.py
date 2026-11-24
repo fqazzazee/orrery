@@ -113,34 +113,42 @@ def main(ids):
             waypoints.pop(mid, None)
     targets = [m for m in (ids or HORIZONS) if HORIZONS.get(m)]
     for mid in targets:
-        waypoints[mid] = []
-        write(waypoints)
-        path = model([mid])[mid]
-        days = {round(p[0], 1): p for p in path}
-        real = real_path(HORIZONS[mid], path[0][0], path[-1][0])
-        for _ in range(MAX):
-            pts = {round(p[0], 1): p for p in model([mid])[mid]}
-            worst, pick = 0, None
-            for t, x, y, z in real:
-                p = pts.get(round(t - 0.0, 1)) or pts.get(round(math.floor(t) + 0.5 if t % 1 else t, 1))
-                p = p or min(pts.values(), key=lambda q: abs(q[0] - t))
-                if abs(p[0] - t) > 1 or p[4] not in ('fly',):
-                    continue
-                d = math.dist(p[1:4], (x, y, z))
-                r = math.hypot(x, y, z)
-                score = d / max(0.02, 0.04 * r)
-                # Keep away from other waypoints and encounters.
-                if score > worst and all(abs(t - w[0]) > 20 for w in waypoints[mid]):
-                    worst, pick = score, [round(t, 1), x, y, z]
-            if worst <= 1 or not pick:
-                break
-            waypoints[mid].append(pick)
+        # The model is rebuilt from lib/waypoints.js, so it is rewritten as we
+        # go; if Horizons or gjs fails, put this mission's old points back.
+        old = waypoints.get(mid, [])
+        try:
+            waypoints[mid] = []
             write(waypoints)
-        else:
-            worst = max(math.dist(p[1:4], q[1:]) / max(0.02, 0.04 * math.hypot(*q[1:]))
-                        for q in real for p in [min(model([mid])[mid], key=lambda p: abs(p[0] - q[0]))]
-                        if abs(p[0] - q[0]) <= 1 and p[4] == 'fly')
-        print(f'{mid:14s} {len(waypoints[mid]):2d} waypoints, worst left {worst:.2f}', flush=True)
+            path = model([mid])[mid]
+            days = {round(p[0], 1): p for p in path}
+            real = real_path(HORIZONS[mid], path[0][0], path[-1][0])
+            for _ in range(MAX):
+                pts = {round(p[0], 1): p for p in model([mid])[mid]}
+                worst, pick = 0, None
+                for t, x, y, z in real:
+                    p = pts.get(round(t - 0.0, 1)) or pts.get(round(math.floor(t) + 0.5 if t % 1 else t, 1))
+                    p = p or min(pts.values(), key=lambda q: abs(q[0] - t))
+                    if abs(p[0] - t) > 1 or p[4] not in ('fly',):
+                        continue
+                    d = math.dist(p[1:4], (x, y, z))
+                    r = math.hypot(x, y, z)
+                    score = d / max(0.02, 0.04 * r)
+                    # Keep away from other waypoints and encounters.
+                    if score > worst and all(abs(t - w[0]) > 20 for w in waypoints[mid]):
+                        worst, pick = score, [round(t, 1), x, y, z]
+                if worst <= 1 or not pick:
+                    break
+                waypoints[mid].append(pick)
+                write(waypoints)
+            else:
+                worst = max(math.dist(p[1:4], q[1:]) / max(0.02, 0.04 * math.hypot(*q[1:]))
+                            for q in real for p in [min(model([mid])[mid], key=lambda p: abs(p[0] - q[0]))]
+                            if abs(p[0] - q[0]) <= 1 and p[4] == 'fly')
+            print(f'{mid:14s} {len(waypoints[mid]):2d} waypoints, worst left {worst:.2f}', flush=True)
+        except BaseException:
+            waypoints[mid] = old
+            write(waypoints)
+            raise
     write(waypoints)
 
 

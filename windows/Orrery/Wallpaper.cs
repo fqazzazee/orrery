@@ -19,8 +19,19 @@ public static class Wallpaper
 
     public static int Run()
     {
-        using var mutex = new Mutex(true, MutexName, out var first);
-        if (!first)
+        // Owning the mutex, not creating it, is what counts: another process
+        // may hold a handle to it for a moment (Integration.WallpaperRunning).
+        using var mutex = new Mutex(false, MutexName);
+        bool owned;
+        try
+        {
+            owned = mutex.WaitOne(0);
+        }
+        catch (AbandonedMutexException)
+        {
+            owned = true;   // the last wallpaper died without letting go
+        }
+        if (!owned)
         {
             Log.Write("wallpaper: already running");
             return 0;
