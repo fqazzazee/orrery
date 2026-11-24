@@ -30,8 +30,14 @@ Bump the version in `metadata.json` (`version-name`), `README.md`,
 `docs/index.html`, `packaging/release-notes.md`, `windows/Orrery/Orrery.csproj`,
 `windows/installer/orrery.iss` and the example tag in
 `.github/workflows/release.yml`. Commit as `Release X.Y.Z: <summary>`, then push
-the `vX.Y.Z` tag: `.github/workflows/release.yml` builds every package and
-publishes the release, with `packaging/release-notes.md` as its notes.
+the `vX.Y.Z` tag: `.github/workflows/release.yml` builds every package with a
+read-only token, and its `publish` job, the only one that can write, makes the
+release with `packaging/release-notes.md` as its notes. Actions are pinned by
+commit SHA.
+
+Folder music plays in a helper process (`lib/music-player.js`), never in
+gnome-shell: GStreamer picks plugins by what a file holds, so untrusted files
+must not be decoded in the compositor.
 
 ## Agent skills
 

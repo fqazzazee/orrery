@@ -70,6 +70,28 @@ export default class Tester extends Extension {
             scene._timeline._handlers.music();
         log('music mode after four clicks ' + s.get_string('music-mode'));
         s.set_string('music-mode', 'muted');
+
+        // Your own folder plays in a helper process, not in the shell; a
+        // "track" that is really a stream manifest is skipped, not fetched;
+        // the helper is gone once the music is let go.
+        const dir = GLib.dir_make_tmp('orrery-music-XXXXXX');
+        const wav = new Uint8Array(44 + 48000 * 2), d = new DataView(wav.buffer);   // 1 s of silence
+        [[0, 'RIFF'], [8, 'WAVEfmt '], [36, 'data']].forEach(([at, t]) => [...t].forEach((c, i) => d.setUint8(at + i, c.charCodeAt(0))));
+        [[4, 36 + 96000], [16, 16], [24, 48000], [28, 96000], [40, 96000]].forEach(([at, n]) => d.setUint32(at, n, true));
+        [[20, 1], [22, 1], [32, 2], [34, 16]].forEach(([at, n]) => d.setUint16(at, n, true));
+        GLib.file_set_contents(`${dir}/quiet.wav`, wav);
+        GLib.file_set_contents(`${dir}/stream.mp3`, '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nhttp://127.0.0.1:9/x.ts\n#EXT-X-ENDLIST\n');
+        const helpers = () => GLib.spawn_command_line_sync('pgrep -fc music-player.js')[1].toString().trim();
+        const music = o.stateObj._music;
+        s.set_string('music-folder', dir);
+        s.set_string('music-source', 'folder');
+        s.set_string('music-mode', 'background');
+        await wait(5000);
+        log(`folder music ${music.playing} in ${music._pipeline?.constructor.name} tracks ${music._tracks?.length} helpers ${helpers()}`);
+        s.set_string('music-mode', 'muted');
+        s.set_string('music-source', 'ambient');
+        await wait(2500);
+        log(`folder music let go: helpers ${helpers()}`);
         scene._togglePanel(true);
         await wait(500);
         log('panel chips ' + scene._panel._chips.length);
