@@ -33,7 +33,9 @@ Bump the version in `metadata.json` (`version-name`), `README.md`,
 the `vX.Y.Z` tag: `.github/workflows/release.yml` builds every package with a
 read-only token, and its `publish` job, the only one that can write, makes the
 release with `packaging/release-notes.md` as its notes. Actions are pinned by
-commit SHA.
+commit SHA. Releases are immutable once published (a repo setting): files
+can't be added or replaced afterwards, so a broken release needs a new
+version, not a fix in place. `main` refuses force pushes and deletion.
 
 Folder music plays in a helper process (`lib/music-player.js`), never in
 gnome-shell: GStreamer picks plugins by what a file holds, so untrusted files

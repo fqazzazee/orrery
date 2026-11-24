@@ -150,9 +150,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+        # Releases are immutable once published, so it is made in one go: gh
+        # creates a draft, uploads the files, then publishes it. Files only:
+        # the Windows artifact also holds the app folders.
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Orrery ${GITHUB_REF_NAME#v}" \
-              --notes-file packaging/release-notes.md
-          # Files only: the Windows artifact also holds the app folders.
-          find out -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
+          find out -maxdepth 1 -type f -print0 | xargs -0 gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "Orrery ${GITHUB_REF_NAME#v}" --notes-file packaging/release-notes.md
