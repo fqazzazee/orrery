@@ -2,7 +2,7 @@
 ; Orrery's installer for Windows (Inno Setup 6). It installs for the current
 ; user only, needs no admin rights, and can make Orrery the screensaver and
 ; start the live wallpaper with Windows. windows/build.ps1 builds it:
-;   ISCC /DAppVersion=1.6.0 /DArch=x64 /DSourceDir=<publish folder> /O<dist> orrery.iss
+;   ISCC /DAppVersion=1.6.1 /DArch=x64 /DSourceDir=<publish folder> /O<dist> orrery.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"

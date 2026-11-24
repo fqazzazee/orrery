@@ -16,7 +16,7 @@
     <ApplicationIcon>orrery.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>1.6.0</Version>
+    <Version>1.6.1</Version>
     <Product>Orrery</Product>
     <Company>fqazzazee</Company>
     <Copyright>GPL-2.0-or-later</Copyright>
